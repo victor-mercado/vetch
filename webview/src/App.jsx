@@ -23,14 +23,22 @@ const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : nul
 
 function App() {
   const [svgData, setSvgData] = useState(emptySvg);
+  const [imageId, setImageId] = useState('0');
 
   useEffect(() => {
     window.addEventListener('message', event => {
       const message = event.data;
       if (message.type === 'update') {
-        setSvgData(message.text.trim() || emptySvg);
+        // Only load the text if it's literally not empty, otherwise load blank template
+        setSvgData(message.text?.trim() ? message.text : emptySvg);
+        setImageId((prev) => (parseInt(prev, 10) + 1).toString());
       }
     });
+
+    // Tell VS Code the webview is ready to receive the initial file contents
+    if (vscode) {
+      vscode.postMessage({ type: 'ready' });
+    }
   }, []);
 
   const handleUpdateImage = (isVector, image) => {
@@ -48,6 +56,7 @@ function App() {
         <PaintEditor
           imageFormat="svg"
           image={svgData}
+          imageId={imageId}
           onUpdateImage={handleUpdateImage}
         />
       </div>

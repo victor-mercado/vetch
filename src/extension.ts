@@ -29,16 +29,13 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
 
         webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
 
-        // Send the initial SVG data to the React app
+        // Send the SVG data to the React app
         const updateWebview = () => {
             webviewPanel.webview.postMessage({
                 type: 'update',
                 text: document.getText(),
             });
         };
-
-        // Wait a brief moment for React to mount, then send the data
-        setTimeout(updateWebview, 500);
 
         let isUpdatingFromWebview = false;
 
@@ -54,9 +51,12 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
             changeDocumentSubscription.dispose();
         });
 
-        // Listen for edits coming FROM the React app
+        // Listen for messages coming FROM the React app
         webviewPanel.webview.onDidReceiveMessage(async e => {
             switch (e.type) {
+                case 'ready':
+                    updateWebview();
+                    return;
                 case 'edit':
                     isUpdatingFromWebview = true;
                     await this.updateTextDocument(document, e.newSvgData);
