@@ -40,9 +40,12 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
         // Wait a brief moment for React to mount, then send the data
         setTimeout(updateWebview, 500);
 
+        let isUpdatingFromWebview = false;
+
         // Listen for changes to the file (like undo/redo)
         const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
             if (e.document.uri.toString() === document.uri.toString()) {
+                if (isUpdatingFromWebview) return;
                 updateWebview();
             }
         });
@@ -52,10 +55,12 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
         });
 
         // Listen for edits coming FROM the React app
-        webviewPanel.webview.onDidReceiveMessage(e => {
+        webviewPanel.webview.onDidReceiveMessage(async e => {
             switch (e.type) {
                 case 'edit':
-                    this.updateTextDocument(document, e.newSvgData);
+                    isUpdatingFromWebview = true;
+                    await this.updateTextDocument(document, e.newSvgData);
+                    isUpdatingFromWebview = false;
                     return;
             }
         });
@@ -63,10 +68,18 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
 
     // Helper to replace the file contents
     private updateTextDocument(document: vscode.TextDocument, newContent: string) {
+        if (document.getText() === newContent) {
+            return Promise.resolve(false);
+        }
         const edit = new vscode.WorkspaceEdit();
+
+        // Robust way to replace the entire document spanning all lines safely
+        const lastLine = document.lineAt(document.lineCount - 1);
+        const endPosition = lastLine.range.end;
+
         edit.replace(
             document.uri,
-            new vscode.Range(0, 0, document.lineCount, 0),
+            new vscode.Range(new vscode.Position(0, 0), endPosition),
             newContent
         );
         return vscode.workspace.applyEdit(edit);

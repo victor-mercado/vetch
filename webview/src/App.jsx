@@ -34,7 +34,7 @@ function App() {
   }, []);
 
   const handleUpdateImage = (isVector, image) => {
-    if (vscode) {
+    if (vscode && isVector) {
       vscode.postMessage({
         type: 'edit',
         newSvgData: image
