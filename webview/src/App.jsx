@@ -24,39 +24,75 @@ const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : nul
 function App() {
   const [svgData, setSvgData] = useState(emptySvg);
   const [imageId, setImageId] = useState('0');
+  const [rotationCenterX, setRotationCenterX] = useState(undefined);
+  const [rotationCenterY, setRotationCenterY] = useState(undefined);
 
   useEffect(() => {
-    window.addEventListener('message', event => {
+    const handleMessage = event => {
       const message = event.data;
       if (message.type === 'update') {
-        // Only load the text if it's literally not empty, otherwise load blank template
-        setSvgData(message.text?.trim() ? message.text : emptySvg);
+        const text = message.text?.trim() ? message.text : emptySvg;
+
+        let cx = undefined;
+        let cy = undefined;
+        const originRegex = /<!--\s*x="([^"]+)"\s*y="([^"]+)"\s*-->/;
+        const match = text.match(originRegex);
+        if (match) {
+          cx = parseFloat(match[1]);
+          cy = parseFloat(match[2]);
+        }
+
+        setRotationCenterX(cx);
+        setRotationCenterY(cy);
+        setSvgData(text);
         setImageId((prev) => (parseInt(prev, 10) + 1).toString());
       }
-    });
+    };
+
+    window.addEventListener('message', handleMessage);
 
     // Tell VS Code the webview is ready to receive the initial file contents
     if (vscode) {
       vscode.postMessage({ type: 'ready' });
     }
+
+    return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  const handleUpdateImage = (isVector, image) => {
+  const handleUpdateImage = (isVector, image, centerX, centerY) => {
     if (vscode && isVector) {
+      let finalSVG = image;
+      if (typeof centerX !== 'undefined' && typeof centerY !== 'undefined') {
+        // Format to Scratch standard x/y comment
+        const newX = Math.round(centerX * 1000) / 1000;
+        const newY = Math.round(centerY * 1000) / 1000;
+        const originComment = `<!-- x="${newX}" y="${newY}" -->`;
+
+        const originRegex = /<!--\s*x="[^"]+"\s*y="[^"]+"\s*-->/;
+        if (originRegex.test(finalSVG)) {
+          finalSVG = finalSVG.replace(originRegex, originComment);
+        } else {
+          // Insert right after the <svg> opening tag
+          finalSVG = finalSVG.replace(/(<svg[^>]*>)/i, `$1\n  ${originComment}`);
+        }
+      }
+
       vscode.postMessage({
         type: 'edit',
-        newSvgData: image
+        newSvgData: finalSVG
       });
     }
   };
 
   return (
     <Provider store={store}>
-      <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      <div style={{ width: 'calc(100vw - 25px)', height: 'calc(100vh - 25px)' }}>
         <PaintEditor
           imageFormat="svg"
           image={svgData}
           imageId={imageId}
+          rotationCenterX={rotationCenterX}
+          rotationCenterY={rotationCenterY}
           onUpdateImage={handleUpdateImage}
         />
       </div>
