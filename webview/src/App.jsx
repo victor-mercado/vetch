@@ -5,6 +5,10 @@ import { intlReducer } from 'react-intl-redux';
 
 // 1. Import the main component normally
 import PaintEditor from 'scratch-paint';
+import paper from '@scratch/paper';
+
+// Expose paper globally for addons
+window.paper = paper;
 
 // 2. The Bypass: Reach directly into the package's internal files to grab the reducer
 import paintReducer from 'scratch-paint/src/reducers/scratch-paint-reducer';
@@ -14,7 +18,20 @@ const reducers = combineReducers({
   intl: intlReducer,
   scratchPaint: paintReducer
 });
-const store = createStore(reducers);
+const rawStore = createStore(reducers);
+
+import { createAdapter } from './scratch-addons/adapter.js';
+import paintSnapSetup from './scratch-addons/paint-snap/userscript.js';
+import paintSkewSetup from './scratch-addons/paint-skew/userscript.js';
+import disablePasteOffsetSetup from './scratch-addons/disable-paste-offset/userscript.js';
+
+const api = createAdapter(rawStore);
+const store = rawStore;
+
+// Initialize addons
+paintSnapSetup(api).catch(console.error);
+paintSkewSetup(api).catch(console.error);
+disablePasteOffsetSetup(api).catch(console.error);
 
 // A blank SVG fallback to prevent crashes on completely empty files
 const emptySvg = '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="480" height="360"></svg>';
