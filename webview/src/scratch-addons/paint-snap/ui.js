@@ -19,6 +19,7 @@ export function initUI({ addon, msg }) {
   addon.tab.displayNoneWhileDisabled(controlsGroup);
 
   const toggleButton = createButton();
+  const darkModeButton = createButton();
 
   const magnetIcon = document.createElement("span");
   magnetIcon.textContent = "🧲";
@@ -52,6 +53,55 @@ export function initUI({ addon, msg }) {
   toggleButton.appendChild(magnetIcon);
   toggleButton.dataset.enabled = snapOn;
   controlsGroup.appendChild(toggleButton);
+
+  let isDarkMode = false;
+  let bgRect = null;
+  const moonIcon = document.createElement("span");
+  moonIcon.textContent = "🌙";
+  moonIcon.style.fontSize = "1rem";
+  moonIcon.style.userSelect = "none";
+  moonIcon.style.display = "flex";
+  moonIcon.style.alignItems = "center";
+  moonIcon.style.justifyContent = "center";
+  moonIcon.style.width = "100%";
+  moonIcon.style.height = "100%";
+
+  darkModeButton.addEventListener("click", () => {
+    isDarkMode = !isDarkMode;
+    moonIcon.textContent = isDarkMode ? "☀️" : "🌙";
+
+    if (bgRect) {
+      bgRect.remove();
+      bgRect = null;
+    }
+
+    if (isDarkMode && window.paper && window.paper.project) {
+      // Find the background guide layer where the checkerboard lives
+      const bgLayer = window.paper.project.layers.find(l => l.data && l.data.isBackgroundGuideLayer);
+
+      bgRect = new window.paper.Path.Rectangle({
+        point: [-10000, -10000],
+        size: [20000, 20000],
+        fillColor: new window.paper.Color(0, 0, 0, 0.6),
+        locked: true,
+        guide: true,
+        data: { isHelperItem: true, noSelect: true, noHover: true }
+      });
+
+      if (bgLayer) {
+        bgLayer.addChild(bgRect);
+        // keep it in front of the checkerboard but behind everything else
+        bgRect.bringToFront();
+      } else {
+        window.paper.project.activeLayer.addChild(bgRect);
+        bgRect.sendToBack();
+      }
+    }
+  });
+
+  darkModeButton.title = msg("toggleDarkMode") || "Toggle Canvas Background";
+  darkModeButton.appendChild(moonIcon);
+  controlsGroup.appendChild(darkModeButton);
 
   const controlsLoop = async () => {
     let hasRunOnce = false;

@@ -1,6 +1,8 @@
 // This file simulates the Scratch Addons extension API environment
 // so that unmodified Turbowarp addons can run in pSVG.
 
+window.scratchAddons = window.scratchAddons || {};
+
 class EventTargetMock {
     constructor() {
         this.listeners = {};
@@ -9,6 +11,11 @@ class EventTargetMock {
     addEventListener(type, callback) {
         if (!this.listeners[type]) this.listeners[type] = [];
         this.listeners[type].push(callback);
+    }
+
+    removeEventListener(type, callback) {
+        if (!this.listeners[type]) return;
+        this.listeners[type] = this.listeners[type].filter(cb => cb !== callback);
     }
 
     dispatchEvent(event) {
@@ -40,24 +47,27 @@ class ReduxMock extends EventTargetMock {
     }
 }
 
-export const createAdapter = (store) => {
-    // We need to inject a middleware into the store if possible, 
-    // but the store is already created. We can monkeypatch store.dispatch
-    // to intercept actions and fire them as "statechanged" detail.
-    const originalDispatch = store.dispatch;
+let sharedReduxMock = null;
+let dispatchPatched = false;
 
-    const reduxMock = new ReduxMock(store);
+export const createAdapter = (store, addonId = "default") => {
+    if (!sharedReduxMock) {
+        sharedReduxMock = new ReduxMock(store);
+    }
 
-    store.dispatch = function (action) {
-        const result = originalDispatch.call(store, action);
-        reduxMock.state = store.getState();
-        // Fire statechanged immediately after
-        reduxMock.dispatchEvent({
-            type: 'statechanged',
-            detail: { action, prev: {}, next: reduxMock.state }
-        });
-        return result;
-    };
+    if (!dispatchPatched) {
+        const originalDispatch = store.dispatch;
+        store.dispatch = function (action) {
+            const result = originalDispatch.call(store, action);
+            sharedReduxMock.state = store.getState();
+            sharedReduxMock.dispatchEvent({
+                type: 'statechanged',
+                detail: { action, prev: {}, next: sharedReduxMock.state }
+            });
+            return result;
+        };
+        dispatchPatched = true;
+    }
 
     return {
         addon: {
@@ -70,7 +80,17 @@ export const createAdapter = (store) => {
                 }
             }(),
             tab: {
-                redux: reduxMock,
+                editorMode: "editor",
+                redux: sharedReduxMock,
+                scratchClass: (...args) => {
+                    return args.map(arg => {
+                        const el = document.querySelector(`[class*="${arg}"]`);
+                        if (el) {
+                            return Array.from(el.classList).find(c => c.startsWith(arg)) || arg;
+                        }
+                        return arg;
+                    }).join(" ");
+                },
                 traps: {
                     getPaper: async () => {
                         // Wait for paper and the select tool to be available on window
@@ -84,7 +104,7 @@ export const createAdapter = (store) => {
                                     }
                                     const hasSelectTool = window.paper.tools.some(t => t.boundingBoxTool);
                                     if (hasSelectTool) {
-                                        reduxMock.state = store.getState();
+                                        sharedReduxMock.state = store.getState();
                                         resolve(window.paper);
                                         return;
                                     }
@@ -101,12 +121,20 @@ export const createAdapter = (store) => {
                 waitForElement: async (selector, opts) => {
                     return new Promise(resolve => {
                         const check = () => {
-                            const el = document.querySelector(selector);
-                            if (el) {
-                                resolve(el);
-                            } else {
-                                setTimeout(check, 100);
+                            const elements = document.querySelectorAll(selector);
+                            for (const el of elements) {
+                                if (opts?.markAsSeen) {
+                                    if (!el.dataset[`saMarkedAsSeen_${addonId}`]) {
+                                        el.dataset[`saMarkedAsSeen_${addonId}`] = "true";
+                                        resolve(el);
+                                        return;
+                                    }
+                                } else {
+                                    resolve(el);
+                                    return;
+                                }
                             }
+                            setTimeout(check, 100);
                         };
                         check();
                     });

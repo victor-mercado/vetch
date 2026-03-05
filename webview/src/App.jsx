@@ -24,14 +24,18 @@ import { createAdapter } from './scratch-addons/adapter.js';
 import paintSnapSetup from './scratch-addons/paint-snap/userscript.js';
 import paintSkewSetup from './scratch-addons/paint-skew/userscript.js';
 import disablePasteOffsetSetup from './scratch-addons/disable-paste-offset/userscript.js';
+import colorPickerSetup from './scratch-addons/color-picker/paint-editor.js';
+import opacitySliderSetup from './scratch-addons/opacity-slider/userscript.js';
 
-const api = createAdapter(rawStore);
-const store = rawStore;
+import './scratch-addons/color-picker/style.css';
+import './scratch-addons/opacity-slider/style.css';
 
 // Initialize addons
-paintSnapSetup(api).catch(console.error);
-paintSkewSetup(api).catch(console.error);
-disablePasteOffsetSetup(api).catch(console.error);
+paintSnapSetup(createAdapter(rawStore, "paintSnap")).catch(console.error);
+paintSkewSetup(createAdapter(rawStore, "paintSkew")).catch(console.error);
+disablePasteOffsetSetup(createAdapter(rawStore, "disablePasteOffset")).catch(console.error);
+colorPickerSetup(createAdapter(rawStore, "colorPicker")).catch(console.error);
+opacitySliderSetup(createAdapter(rawStore, "opacitySlider")).catch(console.error);
 
 // A blank SVG fallback to prevent crashes on completely empty files
 const emptySvg = '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="480" height="360"></svg>';
@@ -102,7 +106,7 @@ function App() {
   };
 
   return (
-    <Provider store={store}>
+    <Provider store={rawStore}>
       <div style={{ width: 'calc(100vw - 25px)', height: 'calc(100vh - 25px)' }}>
         <PaintEditor
           imageFormat="svg"

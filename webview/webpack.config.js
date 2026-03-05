@@ -1,5 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
+import webpack from 'webpack';
 import MiniCssExtractPlugin from 'mini-css-extract-plugin';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,6 +79,10 @@ export default {
     plugins: [
         new MiniCssExtractPlugin({
             filename: 'assets/index.css' // Same output structure as Vite layout
+        }),
+        new webpack.DefinePlugin({
+            'process.env.NODE_ENV': JSON.stringify('development'),
+            'process': JSON.stringify({ env: {} })
         })
     ]
 };
