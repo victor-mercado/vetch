@@ -1,71 +1,38 @@
-# pSVG README
+# Vetch by MarbleStack
 
-This is the README for your extension "pSVG". After writing up a brief description, we recommend including the following sections.
+[![Version](https://img.shields.io/visual-studio-marketplace/v/MarbleStack.vetch?color=blue&label=Version)](https://marketplace.visualstudio.com/items?itemName=MarbleStack.vetch)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Buy Me A Coffee](https://img.shields.io/badge/Support-Buy_Me_A_Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/marblestack)
+
+**Vetch** is an extension for Visual Studio Code that allows you to easily open, view, and edit `.svg` files without interrupting your workflow.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+* **Fully Visual SVG Editing:** No need to manually edit tags; just draw, drag, and drop like a normal human being.
+* **Familiar Interface:** Utilizes the intuitive and simple Scratch 3.0 vector paint editor as a base with more powerful features listed below.
+* **Infinite Canvas:** Easily adjust, scale, skew, rotate, and move elements around without boundaries.
+* **Canvas Panning:** Use SHIFT+DRAG to pan around the canvas.
+* **Skewing:** Hold CTRL while dragging one of the four midpoints of a selection box to skew shapes.
+* **Opacity and HEX Sliders:** Adjust the opacity and HEX values of selected shapes using the color picker.
+* **Dark/Light Canvas Toggle:** Toggle between a light and dark canvas to make editing easier depending on your color schemes.
+* **Snapping:** Switch between freehand mode and snapping mode to easily align shapes.
 
-For example if there is an image subfolder under your extension project workspace:
+## Usage
 
-\!\[feature X\]\(images/feature-x.png\)
+1. Open an SVG file.
+2. Enjoy the feeling of superiority of the fact you have a graphic editor inside your code editor.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+*Tip 1: You may need to set the default editor for SVG files to Vetch. To do this, right-click the file in the Explorer, select "Open With...", and choose "Vetch".*  
+*Tip 2: If you ever need to view the raw SVG code, right-click the file in the Explorer, select "Open With...", and choose the default "Text Editor".*  
 
-## Requirements
+## Support the Project
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+If this extension saves you time or makes your life easier, consider giving me money.
 
-## Extension Settings
+<a href="https://buymeacoffee.com/marblestack" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 50px !important;width: 200px !important;" ></a>
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+## License & Attribution
 
-For example:
+This extension is open-source and licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. 
 
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Attribution:** Vetch utilizes a modified version of `scratch-paint`, an open-source project originally developed by the MIT Scratch Team. The original Scratch source code is also licensed under the AGPL-3.0. "Scratch" is a trademark of the Massachusetts Institute of Technology. This project is not affiliated with, sponsored by, or endorsed by MIT or the Scratch Team.
