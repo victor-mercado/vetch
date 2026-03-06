@@ -54,10 +54,10 @@ export function initUI({ addon, msg }) {
   toggleButton.dataset.enabled = snapOn;
   controlsGroup.appendChild(toggleButton);
 
-  let isDarkMode = false;
+  let isDarkMode = typeof window !== 'undefined' && window.vetchSettings?.isDarkMode !== undefined ? window.vetchSettings.isDarkMode : false;
   let bgRect = null;
   const moonIcon = document.createElement("span");
-  moonIcon.textContent = "🌙";
+  moonIcon.textContent = isDarkMode ? "☀️" : "🌙";
   moonIcon.style.fontSize = "1rem";
   moonIcon.style.userSelect = "none";
   moonIcon.style.display = "flex";
@@ -66,17 +66,13 @@ export function initUI({ addon, msg }) {
   moonIcon.style.width = "100%";
   moonIcon.style.height = "100%";
 
-  darkModeButton.addEventListener("click", () => {
-    isDarkMode = !isDarkMode;
-    moonIcon.textContent = isDarkMode ? "☀️" : "🌙";
-
+  const applyDarkMode = () => {
     if (bgRect) {
       bgRect.remove();
       bgRect = null;
     }
 
     if (isDarkMode && window.paper && window.paper.project) {
-      // Find the background guide layer where the checkerboard lives
       const bgLayer = window.paper.project.layers.find(l => l.data && l.data.isBackgroundGuideLayer);
 
       bgRect = new window.paper.Path.Rectangle({
@@ -90,13 +86,21 @@ export function initUI({ addon, msg }) {
 
       if (bgLayer) {
         bgLayer.addChild(bgRect);
-        // keep it in front of the checkerboard but behind everything else
         bgRect.bringToFront();
       } else {
         window.paper.project.activeLayer.addChild(bgRect);
         bgRect.sendToBack();
       }
     }
+  };
+
+  darkModeButton.addEventListener("click", () => {
+    isDarkMode = !isDarkMode;
+    if (typeof window !== 'undefined' && window.vscode) {
+      window.vscode.postMessage({ type: 'saveSetting', setting: 'isDarkMode', value: isDarkMode });
+    }
+    moonIcon.textContent = isDarkMode ? "☀️" : "🌙";
+    applyDarkMode();
   });
 
   darkModeButton.title = msg("toggleDarkMode") || "Toggle Canvas Background";
@@ -139,6 +143,7 @@ export function initUI({ addon, msg }) {
         for (const el of document.querySelectorAll(".sa-paint-snap-button")) {
           el.className += " " + buttonClass;
         }
+        if (isDarkMode) applyDarkMode();
       }
 
       await new Promise(r => setTimeout(r, 2000));

@@ -12,3 +12,16 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+scratchaddons-temp/**
+webview/node_modules/**
+webview/src/**
+webview/public/**
+webview/*.log
+webview/.gitignore
+webview/README.md
+webview/eslint.config.js
+webview/webpack.config.js
+webview/package-lock.json
+webview/package.json
+webview/patch.js
+webview/index.html

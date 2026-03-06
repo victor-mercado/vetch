@@ -41,6 +41,7 @@ opacitySliderSetup(createAdapter(rawStore, "opacitySlider")).catch(console.error
 const emptySvg = '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="480" height="360"></svg>';
 
 const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+window.vscode = vscode;
 
 function App() {
   const [svgData, setSvgData] = useState(emptySvg);

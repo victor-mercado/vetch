@@ -3,7 +3,8 @@
   "publisher": "MarbleStack",
   "displayName": "Vetch SVG Editor",
   "description": "Edit SVGs using the Scratch 3.0 GUI.",
-  "version": "0.0.1",
+  "icon": "icon.png",
+  "version": "0.0.2",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",

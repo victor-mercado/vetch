@@ -1,4 +1,4 @@
-export let snapOn = true;
+export let snapOn = typeof window !== 'undefined' && window.vetchSettings?.snapOn !== undefined ? window.vetchSettings.snapOn : true;
 
 //const ls = localStorage;
 
@@ -78,6 +78,9 @@ export function disable() {
 export function toggle(enabled) {
   if (enabled) enable();
   else disable();
+  if (typeof window !== 'undefined' && window.vscode) {
+    window.vscode.postMessage({ type: 'saveSetting', setting: 'snapOn', value: snapOn });
+  }
 }
 
 export function setGuideColor(hex) {

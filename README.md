@@ -17,6 +17,8 @@
 * **Dark/Light Canvas Toggle:** Toggle between a light and dark canvas to make editing easier depending on your color schemes.
 * **Snapping:** Switch between freehand mode and snapping mode to easily align shapes.
 
+![Screenshot of Vetch editor.](screenshot.png)
+
 ## Usage
 
 1. Open an SVG file.

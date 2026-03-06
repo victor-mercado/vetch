@@ -57,6 +57,9 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
                 case 'ready':
                     updateWebview();
                     return;
+                case 'saveSetting':
+                    this.context.globalState.update(`vetch.${e.setting}`, e.value);
+                    return;
                 case 'edit':
                     isUpdatingFromWebview = true;
                     await this.updateTextDocument(document, e.newSvgData);
@@ -103,6 +106,12 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
                 <style>
                     body, html { margin: 0; padding: 0; height: 100vh; overflow: hidden; background-color: #fff; }
                 </style>
+                <script>
+                    window.vetchSettings = {
+                        snapOn: ${this.context.globalState.get('vetch.snapOn', true)},
+                        isDarkMode: ${this.context.globalState.get('vetch.isDarkMode', false)}
+                    };
+                </script>
             </head>
             <body>
                 <div id="root"></div>
