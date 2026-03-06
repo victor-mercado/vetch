@@ -28,3 +28,72 @@ html {
   margin: 0;
   padding: 0;
 }
+
+/* --- pSVG UI/UX Dark Theme Overrides & Hidden Elements --- */
+
+/* Hide the top-left Costume Object Name input */
+div[class*="fixed-tools_costume-input_"],
+input[class*="fixed-tools_costume-input_"] {
+  display: none !important;
+}
+
+/* Background of the overall editor area (VS Code default dark gray) */
+div[class*="paint-editor_editor-container_"] {
+  background-color: #1e1e1e !important;
+  color: #cccccc !important;
+}
+
+/* Background of the canvas backing (VS Code side panel gray) */
+div[class*="paper-canvas_canvas-container_"],
+div[class*="scrollable-canvas_canvas-container_"] {
+  background-color: #252526 !important;
+}
+
+/* Dark mode for main menu toolbars */
+div[class*="menu-bar_main-menu_"],
+div[class*="fixed-tools_row_"] {
+  background-color: transparent !important;
+  border-bottom: none !important;
+}
+
+/* Number inputs and general text inputs */
+input[class*="input_input-form_"] {
+  background-color: #3c3c3c !important;
+  color: #ffffff !important;
+  border: 1px solid #555555 !important;
+}
+
+/* Dropdown menus and Popovers */
+div[class*="dropdown_popover-content_"],
+div[class*="color-picker_color-picker_"],
+div[class*="font-dropdown_mod-context-menu_"] {
+  background-color: #252526 !important;
+  border: 1px solid #3c3c3c !important;
+  color: #cccccc !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Buttons in toolbars and dropdowns */
+div[class*="button_button_"],
+button[class*="button_button_"] {
+  background-color: transparent !important;
+  color: #cccccc !important;
+}
+
+/* Hover effect for buttons */
+div[class*="button_button_"]:hover,
+button[class*="button_button_"]:hover {
+  background-color: #3c3c3c !important;
+}
+
+/* Ensure font dropdown item text matches the theme */
+div[class*="font-dropdown_mod-menu-item_"]>span {
+  color: #cccccc !important;
+}
+
+/* Selected button colors */
+div[class*="button_is-active_"],
+button[class*="button_is-active_"] {
+  background-color: #007acc !important;
+  color: #ffffff !important;
+}

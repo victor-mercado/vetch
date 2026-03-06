@@ -15,6 +15,10 @@ const pointPath = path.join(basePath, 'helper/selection-tools/point-tool.js');
 const paperCanvasPath = path.join(basePath, 'containers/paper-canvas.jsx');
 const updateImageHocPath = path.join(basePath, 'hocs/update-image-hoc.jsx');
 const paintEditorPath = path.join(basePath, 'containers/paint-editor.jsx');
+const fontsPath = path.join(basePath, 'lib/fonts.js');
+const fontDropdownPath = path.join(basePath, 'components/font-dropdown/font-dropdown.jsx');
+const fontReducerPath = path.join(basePath, 'reducers/font.js');
+const layoutConstantsPath = path.join(basePath, 'lib/layout-constants.js');
 
 function patchFile(filePath, label, replacements) {
     if (!fs.existsSync(filePath)) {
@@ -153,6 +157,64 @@ try {
         [
             'zoomOnSelection(-PaintEditor.ZOOM_INCREMENT);',
             '// pSVG zoom slower\n        const centerPoint = paper.project.view.center;\n        zoomOnSelection(Math.max(-paper.view.zoom / 2, -PaintEditor.ZOOM_INCREMENT));'
+        ]
+    ]);
+
+    // ── fonts.js ──
+    // Remove extra Latin fonts
+    patchFile(fontsPath, 'fonts.js', [
+        [
+            /const Fonts = {[\s\S]*?};\n/,
+            `const Fonts = {
+    SERIF: 'Serif',
+    CHINESE: '"Microsoft YaHei", "微软雅黑", STXihei, "华文细黑"',
+    JAPANESE: '"ヒラギノ角ゴ Pro W3", "Hiragino Kaku Gothic Pro", Osaka, "メイリオ", Meiryo, "ＭＳ Ｐゴシック", "MS PGothic"',
+    KOREAN: 'Malgun Gothic'
+};
+`
+        ]
+    ]);
+
+    // ── font.js reducer ──
+    // Change initial and default font to Serif instead of Sans Serif which was removed
+    patchFile(fontReducerPath, 'font.js', [
+        [
+            'const initialState = Fonts.SANS_SERIF;',
+            'const initialState = Fonts.SERIF;'
+        ]
+    ]);
+
+    // ── layout-constants.js ──
+    // Prevent the front/back toolbar from collapsing into the 'More' menu
+    patchFile(layoutConstantsPath, 'layout-constants.js', [
+        [
+            'fullSizeEditorMinWidth: 1274',
+            'fullSizeEditorMinWidth: 0'
+        ]
+    ]);
+
+    // ── font-dropdown.jsx ──
+    // Remove extra JSX font buttons in the UI
+    patchFile(fontDropdownPath, 'font-dropdown.jsx', [
+        [
+            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverSansSerif\}[\s\S]*?<\/Button>/,
+            ''
+        ],
+        [
+            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverHandwriting\}[\s\S]*?<\/Button>/,
+            ''
+        ],
+        [
+            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverMarker\}[\s\S]*?<\/Button>/,
+            ''
+        ],
+        [
+            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverCurly\}[\s\S]*?<\/Button>/,
+            ''
+        ],
+        [
+            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverPixel\}[\s\S]*?<\/Button>/,
+            ''
         ]
     ]);
 

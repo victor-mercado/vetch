@@ -139,7 +139,7 @@ export default async function ({ addon, console, msg }) {
 
     const saLabelName = Object.assign(document.createElement("span"), {
       className: addon.tab.scratchClass("color-picker_label-name"),
-      textContent: msg("opacity"),
+      textContent: "Opacity",
     });
 
     const defaultAlpha = tinycolor(getColor()).toRgb().a;
