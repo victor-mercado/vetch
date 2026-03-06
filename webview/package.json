@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "webpack --watch --mode development",
     "build": "webpack --mode production",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "postinstall": "node patch.js"
   },
   "dependencies": {
     "postcss-import": "^16.1.1",

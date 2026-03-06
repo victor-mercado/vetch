@@ -80,6 +80,88 @@ function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  // Shift+drag to pan the canvas
+  useEffect(() => {
+    let isPanning = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    const handleMouseDown = (e) => {
+      if (e.shiftKey && e.button === 0) {
+        // Only start panning if shift is held and we're clicking on the canvas area
+        const canvas = document.querySelector('canvas');
+        if (canvas && (e.target === canvas || canvas.contains(e.target))) {
+          // pSVG: Verify we aren't clicking on a shape/line so we don't break multi-select
+          const boundingRect = canvas.getBoundingClientRect();
+          const pointX = (e.clientX - boundingRect.left) / paper.view.zoom + paper.view.bounds.left;
+          const pointY = (e.clientY - boundingRect.top) / paper.view.zoom + paper.view.bounds.top;
+          const hitResult = paper.project.hitTest(new paper.Point(pointX, pointY), {
+            fill: true,
+            stroke: true,
+            segments: true,
+            tolerance: 5 / paper.view.zoom
+          });
+
+          let clickedOnItem = false;
+          if (hitResult && hitResult.item) {
+            const item = hitResult.item;
+            // Ignore hits on guide items (like background checkerboard or selection guides)
+            if (!item.data || (!item.data.isGuideLayer && !item.data.isBackgroundGuideLayer && !item.data.isDragCrosshairLayer && !item.data.isHelperItem && !item.data.saPaintSnapGuide)) {
+              // Make sure the item's layer isn't a guide layer
+              let currentItem = item;
+              while (currentItem && currentItem.parent) {
+                if (currentItem.data && (currentItem.data.isGuideLayer || currentItem.data.isBackgroundGuideLayer || currentItem.data.isDragCrosshairLayer)) {
+                  currentItem = null; // Mark as guide
+                  break;
+                }
+                currentItem = currentItem.parent;
+              }
+              if (currentItem) {
+                clickedOnItem = true;
+              }
+            }
+          }
+
+          if (!clickedOnItem) {
+            isPanning = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            e.preventDefault();
+            e.stopPropagation();
+            document.body.style.cursor = 'grabbing';
+          }
+        }
+      }
+    };
+
+    const handleMouseMove = (e) => {
+      if (!isPanning) return;
+      const dx = (lastX - e.clientX) / paper.view.zoom;
+      const dy = (lastY - e.clientY) / paper.view.zoom;
+      paper.view.scrollBy(new paper.Point(dx, dy));
+      lastX = e.clientX;
+      lastY = e.clientY;
+      e.preventDefault();
+    };
+
+    const handleMouseUp = () => {
+      if (isPanning) {
+        isPanning = false;
+        document.body.style.cursor = '';
+      }
+    };
+
+    window.addEventListener('mousedown', handleMouseDown, true);
+    window.addEventListener('mousemove', handleMouseMove, true);
+    window.addEventListener('mouseup', handleMouseUp, true);
+
+    return () => {
+      window.removeEventListener('mousedown', handleMouseDown, true);
+      window.removeEventListener('mousemove', handleMouseMove, true);
+      window.removeEventListener('mouseup', handleMouseUp, true);
+    };
+  }, []);
+
   const handleUpdateImage = (isVector, image, centerX, centerY) => {
     if (vscode && isVector) {
       let finalSVG = image;

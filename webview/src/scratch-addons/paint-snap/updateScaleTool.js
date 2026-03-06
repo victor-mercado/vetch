@@ -204,8 +204,6 @@ export const updateScaleTool = (paper, tool) => {
     if (!this.active) return;
     const point = event.point;
     const bounds = getActionBounds(this.isBitmap);
-    point.x = Math.max(bounds.left, Math.min(point.x, bounds.right));
-    point.y = Math.max(bounds.top, Math.min(point.y, bounds.bottom));
 
     if (!this.lastPoint) this.lastPoint = event.lastPoint;
 
