@@ -97,3 +97,15 @@ button[class*="button_is-active_"] {
   background-color: #007acc !important;
   color: #ffffff !important;
 }
+
+/* Prevent text selection in color picker popup (sliders, labels, readouts) */
+div[class*="color-picker_color-picker_"],
+div[class*="color-picker_row-header"],
+span[class*="color-picker_label-name"],
+span[class*="color-picker_label-readout"],
+div[class*="slider_container"],
+.sa-opacity-slider,
+.sa-opacity-handle {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}

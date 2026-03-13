@@ -19,6 +19,10 @@ const fontsPath = path.join(basePath, 'lib/fonts.js');
 const fontDropdownPath = path.join(basePath, 'components/font-dropdown/font-dropdown.jsx');
 const fontReducerPath = path.join(basePath, 'reducers/font.js');
 const layoutConstantsPath = path.join(basePath, 'lib/layout-constants.js');
+const fillToolPath = path.join(basePath, 'helper/tools/fill-tool.js');
+const copyPasteHocPath = path.join(basePath, 'hocs/copy-paste-hoc.jsx');
+const bbToolPath = path.join(basePath, 'helper/selection-tools/bounding-box-tool.js');
+const modeToolsPath = path.join(basePath, 'components/mode-tools/mode-tools.jsx');
 
 function patchFile(filePath, label, replacements) {
     if (!fs.existsSync(filePath)) {
@@ -243,6 +247,229 @@ try {
         [
             '            // Add back viewbox\n            if (workspaceMask) {\n                paper.project.activeLayer.addChild(workspaceMask);\n                workspaceMask.clipMask = true;\n            }',
             '            // pSVG: Don\'t re-add the workspace clip mask - allow unbounded canvas\n            // if (workspaceMask) {\n            //     paper.project.activeLayer.addChild(workspaceMask);\n            //     workspaceMask.clipMask = true;\n            // }'
+        ]
+    ]);
+
+    // ── fill-tool.js ──
+    // The opacity slider addon bakes alpha into the Redux fill color.
+    // During hover preview, strip the alpha so only the color shows.
+    // On mouseUp (commit), let the alpha-baked color through unchanged.
+    patchFile(fillToolPath, 'fill-tool.js', [
+        [
+            `    // Either pass in a fully defined paper.Color as color1,
+    // or pass in 2 color strings, a gradient type, and a pointer location
+    _setFillItemColor (color1, color2, gradientType, pointerLocation) {
+        const item = this._getFillItem();
+        if (!item) return;
+        const colorProp = this.fillProperty === 'fill' ? 'fillColor' : 'strokeColor';
+        // Only create a gradient if specifically requested, else use color1 directly
+        // This ensures we do not set a gradient by accident (see scratch-paint#830).
+        if (gradientType && gradientType !== GradientTypes.SOLID) {
+            item[colorProp] = createGradientObject(
+                color1,
+                color2,
+                gradientType,
+                item.bounds,
+                pointerLocation,
+                item.strokeWidth
+            );
+        } else {
+            item[colorProp] = color1;
+        }
+    }`,
+            `    // Either pass in a fully defined paper.Color as color1,
+    // or pass in 2 color strings, a gradient type, and a pointer location
+    _setFillItemColor (color1, color2, gradientType, pointerLocation) {
+        const item = this._getFillItem();
+        if (!item) return;
+        const colorProp = this.fillProperty === 'fill' ? 'fillColor' : 'strokeColor';
+
+        // pSVG: During hover preview, strip alpha so only the color shows.
+        // On commit (mouseUp), the alpha-baked color from Redux passes through unchanged.
+        const _handleOpacity = (color) => {
+            if (!this._isCommitting && color) {
+                // Strip alpha during hover preview
+                if (typeof color === 'string') {
+                    const paperColor = new paper.Color(color);
+                    paperColor.alpha = 1;
+                    return paperColor;
+                } else if (color instanceof paper.Color && color.alpha < 1) {
+                    const c = color.clone();
+                    c.alpha = 1;
+                    return c;
+                }
+            }
+            return color;
+        };
+
+        // Only create a gradient if specifically requested, else use color1 directly
+        // This ensures we do not set a gradient by accident (see scratch-paint#830).
+        if (gradientType && gradientType !== GradientTypes.SOLID) {
+            item[colorProp] = createGradientObject(
+                color1,
+                color2,
+                gradientType,
+                item.bounds,
+                pointerLocation,
+                item.strokeWidth
+            );
+        } else {
+            item[colorProp] = _handleOpacity(color1);
+        }
+    }`
+        ],
+        // Set _isCommitting flag in handleMouseUp so alpha passes through on click
+        [
+            `    handleMouseUp (event) {
+        if (event.event.button > 0) return; // only first mouse button
+        if (this.fillItem) {`,
+            `    handleMouseUp (event) {
+        if (event.event.button > 0) return; // only first mouse button
+        // pSVG: Set committing flag so alpha from opacity slider passes through
+        this._isCommitting = true;
+        if (this.fillItem) {
+            // Re-apply the fill color with full alpha now that we're committing
+            this._setFillItemColor(this.fillColor, this.fillColor2, this.gradientType, event.point);`
+        ],
+        [
+            `            this.onUpdateImage();
+        }
+    }`,
+            `            this.onUpdateImage();
+        }
+        this._isCommitting = false;
+    }`
+        ]
+    ]);
+
+    // ── bounding-box-tool.js ──
+    // Redraw selection bounds during drag so the outline follows items
+    patchFile(bbToolPath, 'bounding-box-tool.js', [
+        [
+            `    onMouseDrag (event) {
+        if (event.event.button > 0 || !this.mode) return; // only first mouse button
+        this._modeMap[this.mode].onMouseDrag(event);
+
+        // Set the cursor for moving a sprite once the drag has actually started (i.e. the mouse has been moved while
+        // pressed), so that the mouse doesn't "flash" to the grabbing cursor every time a sprite is clicked.
+        if (this.mode === BoundingBoxModes.MOVE) {
+            this.setCursor(Cursors.GRABBING);
+        }
+    }`,
+            `    onMouseDrag (event) {
+        if (event.event.button > 0 || !this.mode) return; // only first mouse button
+        this._modeMap[this.mode].onMouseDrag(event);
+
+        // pSVG: Update selection bounds outline during drag so it follows the items
+        if (this.mode === BoundingBoxModes.MOVE) {
+            this.setSelectionBounds();
+            this.removeBoundsHandles();
+            this.setCursor(Cursors.GRABBING);
+        }
+    }`
+        ]
+    ]);
+
+    // ── copy-paste-hoc.jsx ──
+    // Write to system clipboard on copy, read from system clipboard on paste
+    patchFile(copyPasteHocPath, 'copy-paste-hoc.jsx', [
+        [
+            '            this.props.setClipboardItems(clipboardItems);',
+            `            this.props.setClipboardItems(clipboardItems);
+
+            // pSVG: Also write to system clipboard for cross-tab support
+            try {
+                const clipboardData = JSON.stringify({
+                    type: 'vetch-clipboard',
+                    items: clipboardItems
+                });
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(clipboardData).catch(() => {});
+                }
+            } catch (e) {
+                // Ignore clipboard errors
+            }`
+        ],
+        [
+            `        handlePaste () {
+            clearSelection(this.props.clearSelectedItems);
+
+            if (this.props.clipboardItems.length === 0) return;`,
+            `        handlePaste () {
+            clearSelection(this.props.clearSelectedItems);
+
+            // pSVG: Try reading from system clipboard first for cross-tab paste
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                navigator.clipboard.readText().then(text => {
+                    try {
+                        const data = JSON.parse(text);
+                        if (data && data.type === 'vetch-clipboard' && Array.isArray(data.items) && data.items.length > 0) {
+                            // Use system clipboard items
+                            this._doPaste(data.items);
+                            return;
+                        }
+                    } catch (e) {
+                        // Not valid vetch clipboard data, fall through
+                    }
+                    // Fall back to Redux clipboard
+                    this._doPaste(this.props.clipboardItems);
+                }).catch(() => {
+                    // Clipboard read failed, use Redux clipboard
+                    this._doPaste(this.props.clipboardItems);
+                });
+                return;
+            }
+
+            if (this.props.clipboardItems.length === 0) return;`
+        ],
+        [
+            `        render () {`,
+            `        _doPaste (clipboardItems) {
+            if (!clipboardItems || clipboardItems.length === 0) return;
+
+            let items = [];
+            for (let i = 0; i < clipboardItems.length; i++) {
+                const item = paper.Base.importJSON(clipboardItems[i]);
+                if (item) {
+                    items.push(item);
+                }
+            }
+            if (!items.length) return;
+            // If pasting a group or non-raster to bitmap, rasterize first
+            if (isBitmap(this.props.format) && !(items.length === 1 && items[0] instanceof paper.Raster)) {
+                const group = new paper.Group(items);
+                items = [group.rasterize()];
+                group.remove();
+            }
+            for (const item of items) {
+                const placedItem = paper.project.getActiveLayer().addChild(item);
+                placedItem.selected = true;
+                // pSVG: No paste offset - paste at same position for cross-tab consistency
+            }
+            this.props.setSelectedItems(this.props.format);
+            this.props.onUpdateImage();
+        }
+        render () {`
+        ]
+    ]);
+
+    // ── mode-tools.jsx ──
+    // Make paste button always enabled (system clipboard may have content even if Redux clipboard is empty)
+    patchFile(modeToolsPath, 'mode-tools.jsx', [
+        [
+            `                    <LabeledIconButton
+                        disabled={!(props.clipboardItems.length > 0)}
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={pasteIcon}
+                        title={intl.formatMessage(messages.paste)}
+                        onClick={props.onPasteFromClipboard}
+                    />`,
+            `                    <LabeledIconButton
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={pasteIcon}
+                        title={intl.formatMessage(messages.paste)}
+                        onClick={props.onPasteFromClipboard}
+                    />`
         ]
     ]);
 

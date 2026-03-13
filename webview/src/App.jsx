@@ -53,15 +53,28 @@ function App() {
     const handleMessage = event => {
       const message = event.data;
       if (message.type === 'update') {
-        const text = message.text?.trim() ? message.text : emptySvg;
+        let text = message.text?.trim() ? message.text : emptySvg;
 
         let cx = undefined;
         let cy = undefined;
-        const originRegex = /<!--\s*x="([^"]+)"\s*y="([^"]+)"\s*-->/;
-        const match = text.match(originRegex);
-        if (match) {
-          cx = parseFloat(match[1]);
-          cy = parseFloat(match[2]);
+
+        // Parse Scratch's rotation center format: <!--rotationCenter:X:Y--> (after </svg>)
+        const scratchOriginRegex = /<!--rotationCenter:(-?[\d.]+):(-?[\d.]+)-->/;
+        const scratchMatch = text.match(scratchOriginRegex);
+        if (scratchMatch) {
+          cx = parseFloat(scratchMatch[1]);
+          cy = parseFloat(scratchMatch[2]);
+          // Strip the rotation center comment so it doesn't appear as SVG content
+          text = text.replace(scratchOriginRegex, '').trim();
+        } else {
+          // Legacy fallback: parse old Vetch format <!-- x="..." y="..." -->
+          const legacyRegex = /<!--\s*x="([^"]+)"\s*y="([^"]+)"\s*-->/;
+          const legacyMatch = text.match(legacyRegex);
+          if (legacyMatch) {
+            cx = parseFloat(legacyMatch[1]);
+            cy = parseFloat(legacyMatch[2]);
+            text = text.replace(legacyRegex, '').trim();
+          }
         }
 
         setRotationCenterX(cx);
@@ -81,56 +94,51 @@ function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  // Shift+drag to pan the canvas
+  // Auto-focus webview on first canvas interaction so keyboard shortcuts work immediately
+  useEffect(() => {
+    const handleFirstInteraction = (e) => {
+      const canvas = document.querySelector('canvas');
+      if (canvas && (e.target === canvas || canvas.contains(e.target))) {
+        // Focus the document to enable keyboard event capture
+        window.focus();
+        document.body.focus();
+
+        // Click the currently-active tool button to initialize scratch-paint's keyboard handler
+        // This simulates what normally happens when a user clicks a GUI button
+        const activeButton = document.querySelector('span[class*="tool-select-base_is-selected"]');
+        if (activeButton) {
+          activeButton.click();
+        }
+
+        // Only need to do this once
+        window.removeEventListener('mousedown', handleFirstInteraction, true);
+      }
+    };
+
+    window.addEventListener('mousedown', handleFirstInteraction, true);
+
+    return () => {
+      window.removeEventListener('mousedown', handleFirstInteraction, true);
+    };
+  }, []);
+
+  // Middle mouse button drag to pan the canvas
   useEffect(() => {
     let isPanning = false;
     let lastX = 0;
     let lastY = 0;
 
     const handleMouseDown = (e) => {
-      if (e.shiftKey && e.button === 0) {
-        // Only start panning if shift is held and we're clicking on the canvas area
+      // Middle mouse button (button === 1) to pan
+      if (e.button === 1) {
         const canvas = document.querySelector('canvas');
         if (canvas && (e.target === canvas || canvas.contains(e.target))) {
-          // pSVG: Verify we aren't clicking on a shape/line so we don't break multi-select
-          const boundingRect = canvas.getBoundingClientRect();
-          const pointX = (e.clientX - boundingRect.left) / paper.view.zoom + paper.view.bounds.left;
-          const pointY = (e.clientY - boundingRect.top) / paper.view.zoom + paper.view.bounds.top;
-          const hitResult = paper.project.hitTest(new paper.Point(pointX, pointY), {
-            fill: true,
-            stroke: true,
-            segments: true,
-            tolerance: 5 / paper.view.zoom
-          });
-
-          let clickedOnItem = false;
-          if (hitResult && hitResult.item) {
-            const item = hitResult.item;
-            // Ignore hits on guide items (like background checkerboard or selection guides)
-            if (!item.data || (!item.data.isGuideLayer && !item.data.isBackgroundGuideLayer && !item.data.isDragCrosshairLayer && !item.data.isHelperItem && !item.data.saPaintSnapGuide)) {
-              // Make sure the item's layer isn't a guide layer
-              let currentItem = item;
-              while (currentItem && currentItem.parent) {
-                if (currentItem.data && (currentItem.data.isGuideLayer || currentItem.data.isBackgroundGuideLayer || currentItem.data.isDragCrosshairLayer)) {
-                  currentItem = null; // Mark as guide
-                  break;
-                }
-                currentItem = currentItem.parent;
-              }
-              if (currentItem) {
-                clickedOnItem = true;
-              }
-            }
-          }
-
-          if (!clickedOnItem) {
-            isPanning = true;
-            lastX = e.clientX;
-            lastY = e.clientY;
-            e.preventDefault();
-            e.stopPropagation();
-            document.body.style.cursor = 'grabbing';
-          }
+          isPanning = true;
+          lastX = e.clientX;
+          lastY = e.clientY;
+          e.preventDefault();
+          e.stopPropagation();
+          document.body.style.cursor = 'grabbing';
         }
       }
     };
@@ -145,40 +153,47 @@ function App() {
       e.preventDefault();
     };
 
-    const handleMouseUp = () => {
-      if (isPanning) {
+    const handleMouseUp = (e) => {
+      if (isPanning && (e.button === 1 || e.buttons === 0)) {
         isPanning = false;
         document.body.style.cursor = '';
+      }
+    };
+
+    // Prevent default middle-click behavior (auto-scroll)
+    const handleAuxClick = (e) => {
+      if (e.button === 1) {
+        e.preventDefault();
       }
     };
 
     window.addEventListener('mousedown', handleMouseDown, true);
     window.addEventListener('mousemove', handleMouseMove, true);
     window.addEventListener('mouseup', handleMouseUp, true);
+    window.addEventListener('auxclick', handleAuxClick, true);
 
     return () => {
       window.removeEventListener('mousedown', handleMouseDown, true);
       window.removeEventListener('mousemove', handleMouseMove, true);
       window.removeEventListener('mouseup', handleMouseUp, true);
+      window.removeEventListener('auxclick', handleAuxClick, true);
     };
   }, []);
 
   const handleUpdateImage = (isVector, image, centerX, centerY) => {
     if (vscode && isVector) {
       let finalSVG = image;
-      if (typeof centerX !== 'undefined' && typeof centerY !== 'undefined') {
-        // Format to Scratch standard x/y comment
-        const newX = Math.round(centerX * 1000) / 1000;
-        const newY = Math.round(centerY * 1000) / 1000;
-        const originComment = `<!-- x="${newX}" y="${newY}" -->`;
 
-        const originRegex = /<!--\s*x="[^"]+"\s*y="[^"]+"\s*-->/;
-        if (originRegex.test(finalSVG)) {
-          finalSVG = finalSVG.replace(originRegex, originComment);
-        } else {
-          // Insert right after the <svg> opening tag
-          finalSVG = finalSVG.replace(/(<svg[^>]*>)/i, `$1\n  ${originComment}`);
-        }
+      // Remove any old-format origin comments from the SVG content
+      finalSVG = finalSVG.replace(/<!--\s*x="[^"]+"\s*y="[^"]+"\s*-->/g, '').trim();
+      // Remove any existing Scratch rotation center comments
+      finalSVG = finalSVG.replace(/<!--rotationCenter:-?[\d.]+:-?[\d.]+-->/g, '').trim();
+
+      if (typeof centerX !== 'undefined' && typeof centerY !== 'undefined') {
+        // Append Scratch-compatible rotation center comment after </svg>
+        const rcX = Math.round(centerX * 1000) / 1000;
+        const rcY = Math.round(centerY * 1000) / 1000;
+        finalSVG = `${finalSVG}<!--rotationCenter:${rcX}:${rcY}-->`;
       }
 
       vscode.postMessage({

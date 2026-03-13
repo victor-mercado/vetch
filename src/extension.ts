@@ -104,7 +104,7 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
                 <link href="${styleUri}" rel="stylesheet">
                 <title>Scratch SVG Editor</title>
                 <style>
-                    body, html { margin: 0; padding: 0; height: 100vh; overflow: hidden; background-color: #fff; }
+                    body, html { margin: 0; padding: 0; height: 100vh; overflow: hidden; background-color: #1e1e1e; }
                 </style>
                 <script>
                     window.vetchSettings = {
