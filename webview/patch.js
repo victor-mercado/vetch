@@ -251,94 +251,33 @@ try {
     ]);
 
     // ── fill-tool.js ──
-    // The opacity slider addon bakes alpha into the Redux fill color.
-    // During hover preview, strip the alpha so only the color shows.
-    // On mouseUp (commit), let the alpha-baked color through unchanged.
+    // Apply opacity from slider only on click (handleMouseUp), not during hover preview.
+    // We do NOT modify _setFillItemColor — it stays vanilla so hover/unhover color restoration works correctly.
+    // Instead, we apply opacity directly on the item's color property in handleMouseUp before committing.
     patchFile(fillToolPath, 'fill-tool.js', [
-        [
-            `    // Either pass in a fully defined paper.Color as color1,
-    // or pass in 2 color strings, a gradient type, and a pointer location
-    _setFillItemColor (color1, color2, gradientType, pointerLocation) {
-        const item = this._getFillItem();
-        if (!item) return;
-        const colorProp = this.fillProperty === 'fill' ? 'fillColor' : 'strokeColor';
-        // Only create a gradient if specifically requested, else use color1 directly
-        // This ensures we do not set a gradient by accident (see scratch-paint#830).
-        if (gradientType && gradientType !== GradientTypes.SOLID) {
-            item[colorProp] = createGradientObject(
-                color1,
-                color2,
-                gradientType,
-                item.bounds,
-                pointerLocation,
-                item.strokeWidth
-            );
-        } else {
-            item[colorProp] = color1;
-        }
-    }`,
-            `    // Either pass in a fully defined paper.Color as color1,
-    // or pass in 2 color strings, a gradient type, and a pointer location
-    _setFillItemColor (color1, color2, gradientType, pointerLocation) {
-        const item = this._getFillItem();
-        if (!item) return;
-        const colorProp = this.fillProperty === 'fill' ? 'fillColor' : 'strokeColor';
-
-        // pSVG: During hover preview, strip alpha so only the color shows.
-        // On commit (mouseUp), the alpha-baked color from Redux passes through unchanged.
-        const _handleOpacity = (color) => {
-            if (!this._isCommitting && color) {
-                // Strip alpha during hover preview
-                if (typeof color === 'string') {
-                    const paperColor = new paper.Color(color);
-                    paperColor.alpha = 1;
-                    return paperColor;
-                } else if (color instanceof paper.Color && color.alpha < 1) {
-                    const c = color.clone();
-                    c.alpha = 1;
-                    return c;
-                }
-            }
-            return color;
-        };
-
-        // Only create a gradient if specifically requested, else use color1 directly
-        // This ensures we do not set a gradient by accident (see scratch-paint#830).
-        if (gradientType && gradientType !== GradientTypes.SOLID) {
-            item[colorProp] = createGradientObject(
-                color1,
-                color2,
-                gradientType,
-                item.bounds,
-                pointerLocation,
-                item.strokeWidth
-            );
-        } else {
-            item[colorProp] = _handleOpacity(color1);
-        }
-    }`
-        ],
-        // Set _isCommitting flag in handleMouseUp so alpha passes through on click
         [
             `    handleMouseUp (event) {
         if (event.event.button > 0) return; // only first mouse button
         if (this.fillItem) {`,
             `    handleMouseUp (event) {
         if (event.event.button > 0) return; // only first mouse button
-        // pSVG: Set committing flag so alpha from opacity slider passes through
-        this._isCommitting = true;
         if (this.fillItem) {
-            // Re-apply the fill color with full alpha now that we're committing
-            this._setFillItemColor(this.fillColor, this.fillColor2, this.gradientType, event.point);`
-        ],
-        [
-            `            this.onUpdateImage();
-        }
-    }`,
-            `            this.onUpdateImage();
-        }
-        this._isCommitting = false;
-    }`
+            // pSVG: Apply opacity from slider directly on the item's color before committing
+            const opacityAlpha = (typeof window !== 'undefined' && window.scratchAddons &&
+                typeof window.scratchAddons.opacitySliderAlpha === 'number')
+                ? window.scratchAddons.opacitySliderAlpha : null;
+            if (opacityAlpha !== null) {
+                const colorProp = this.fillProperty === 'fill' ? 'fillColor' : 'strokeColor';
+                const fillItem = this._getFillItem();
+                if (fillItem && fillItem[colorProp]) {
+                    fillItem[colorProp] = new paper.Color({
+                        red: fillItem[colorProp].red,
+                        green: fillItem[colorProp].green,
+                        blue: fillItem[colorProp].blue,
+                        alpha: opacityAlpha
+                    });
+                }
+            }`
         ]
     ]);
 
