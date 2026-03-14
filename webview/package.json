@@ -10,6 +10,7 @@
     "postinstall": "node patch.js"
   },
   "dependencies": {
+    "paperjs-offset": "^1.0.8",
     "postcss-import": "^16.1.1",
     "postcss-nested": "^7.0.2",
     "postcss-simple-vars": "^7.0.1",

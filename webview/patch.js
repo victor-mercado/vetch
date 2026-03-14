@@ -23,6 +23,10 @@ const fillToolPath = path.join(basePath, 'helper/tools/fill-tool.js');
 const copyPasteHocPath = path.join(basePath, 'hocs/copy-paste-hoc.jsx');
 const bbToolPath = path.join(basePath, 'helper/selection-tools/bounding-box-tool.js');
 const modeToolsPath = path.join(basePath, 'components/mode-tools/mode-tools.jsx');
+const fixedToolsComponentPath = path.join(basePath, 'components/fixed-tools/fixed-tools.jsx');
+const fixedToolsContainerPath = path.join(basePath, 'containers/fixed-tools.jsx');
+const fixedToolsIconsDir = path.join(basePath, 'components/fixed-tools/icons');
+const vetchIconsDir = path.resolve(__dirname, 'src/icons');
 
 function patchFile(filePath, label, replacements) {
     if (!fs.existsSync(filePath)) {
@@ -33,9 +37,12 @@ function patchFile(filePath, label, replacements) {
     for (const [search, replace] of replacements) {
         if (typeof search === 'string') {
             if (content.includes(search)) {
-                content = content.split(search).join(replace);
+                if (!content.includes(replace)) {
+                    content = content.split(search).join(replace);
+                }
             }
         } else {
+            // For regex, we don't do a strict include check but we can assume regexes are designed carefully
             content = content.replace(search, replace);
         }
     }
@@ -409,6 +416,181 @@ try {
                         title={intl.formatMessage(messages.paste)}
                         onClick={props.onPasteFromClipboard}
                     />`
+        ]
+    ]);
+
+    // ── Copy boolean tool icons into scratch-paint icons dir ──
+    const iconsToCopy = ['expand-stroke.svg', 'union.svg', 'subtract.svg'];
+    for (const icon of iconsToCopy) {
+        const src = path.join(vetchIconsDir, icon);
+        const dst = path.join(fixedToolsIconsDir, icon);
+        if (fs.existsSync(src)) {
+            fs.copyFileSync(src, dst);
+        }
+    }
+    console.log('[patch.js] Copied boolean tool icons');
+
+    // ── Copy boolean-tools.js helper into scratch-paint ──
+    const boolSrc = path.resolve(__dirname, 'src/boolean-tools.js');
+    const boolDst = path.join(basePath, 'helper/boolean-tools.js');
+    if (fs.existsSync(boolSrc)) {
+        fs.copyFileSync(boolSrc, boolDst);
+    }
+    console.log('[patch.js] Copied boolean-tools.js');
+
+    // ── fixed-tools.jsx (container) ──
+    // Add handlers for Expand Stroke, Union, and Subtract
+    patchFile(fixedToolsContainerPath, 'fixed-tools container', [
+        // Add imports for boolean tools
+        [
+            `import {bringToFront, sendBackward, sendToBack, bringForward} from '../helper/order';`,
+            `import {bringToFront, sendBackward, sendToBack, bringForward} from '../helper/order';
+import {expandStroke, unionItems, subtractItems, canExpandStroke, canUnion, canSubtract} from '../helper/boolean-tools';`
+        ],
+        // Add handler methods to bindAll
+        [
+            `        bindAll(this, [
+            'handleSendBackward',
+            'handleSendForward',
+            'handleSendToBack',
+            'handleSendToFront',
+            'handleSetSelectedItems',
+            'handleGroup',
+            'handleUngroup'
+        ]);`,
+            `        bindAll(this, [
+            'handleSendBackward',
+            'handleSendForward',
+            'handleSendToBack',
+            'handleSendToFront',
+            'handleSetSelectedItems',
+            'handleGroup',
+            'handleUngroup',
+            'handleExpandStroke',
+            'handleUnion',
+            'handleSubtract'
+        ]);`
+        ],
+        // Add handler method implementations after handleUngroup
+        [
+            `    handleSendBackward () {`,
+            `    handleExpandStroke () {
+        expandStroke(this.props.clearSelectedItems, this.handleSetSelectedItems, this.props.onUpdateImage);
+    }
+    handleUnion () {
+        unionItems(this.props.clearSelectedItems, this.handleSetSelectedItems, this.props.onUpdateImage);
+    }
+    handleSubtract () {
+        subtractItems(this.props.clearSelectedItems, this.handleSetSelectedItems, this.props.onUpdateImage);
+    }
+    handleSendBackward () {`
+        ],
+        // Pass new handlers as props in render
+        [
+            `                onUngroup={this.handleUngroup}`,
+            `                onUngroup={this.handleUngroup}
+                onExpandStroke={this.handleExpandStroke}
+                onUnion={this.handleUnion}
+                onSubtract={this.handleSubtract}`
+        ]
+    ]);
+
+    // ── fixed-tools.jsx (component) ──
+    // Add boolean tool buttons to the toolbar
+    patchFile(fixedToolsComponentPath, 'fixed-tools component', [
+        // Add icon imports
+        [
+            `import ungroupIcon from './icons/ungroup.svg';`,
+            `import ungroupIcon from './icons/ungroup.svg';
+import expandStrokeIcon from './icons/expand-stroke.svg';
+import unionIcon from './icons/union.svg';
+import subtractIcon from './icons/subtract.svg';
+
+import {canExpandStroke, canUnion, canSubtract} from '../../helper/boolean-tools';`
+        ],
+        // Add message definitions
+        [
+            `    more: {
+        defaultMessage: 'More',
+        description: 'Label for dropdown to access more action buttons',
+        id: 'paint.paintEditor.more'
+    }`,
+            `    more: {
+        defaultMessage: 'More',
+        description: 'Label for dropdown to access more action buttons',
+        id: 'paint.paintEditor.more'
+    },
+    expandStroke: {
+        defaultMessage: 'Expand',
+        description: 'Label for the button to expand stroke into geometry',
+        id: 'paint.paintEditor.expandStroke'
+    },
+    union: {
+        defaultMessage: 'Union',
+        description: 'Label for the button to merge selected shapes',
+        id: 'paint.paintEditor.union'
+    },
+    subtract: {
+        defaultMessage: 'Subtract',
+        description: 'Label for the button to subtract shapes',
+        id: 'paint.paintEditor.subtract'
+    }`
+        ],
+        // Add buttons after the Back button section (after the InputGroup that contains Front/Back)
+        [
+            `                    {/* To be rotation point */}
+                    {/* <InputGroup>
+                        <LabeledIconButton
+                            imgAlt="Rotation Point"
+                            imgSrc={rotationPointIcon}
+                            title="Rotation Point"
+                            onClick={function () {}}
+                        />
+                    </InputGroup> */}
+                </MediaQuery> : null
+            }`,
+            `                    {/* To be rotation point */}
+                    {/* <InputGroup>
+                        <LabeledIconButton
+                            imgAlt="Rotation Point"
+                            imgSrc={rotationPointIcon}
+                            title="Rotation Point"
+                            onClick={function () {}}
+                        />
+                    </InputGroup> */}
+                    <InputGroup className={styles.modDashedBorder}>
+                        <LabeledIconButton
+                            disabled={!canExpandStroke()}
+                            hideLabel={hideLabel(intl.locale)}
+                            imgSrc={expandStrokeIcon}
+                            title={intl.formatMessage(messages.expandStroke)}
+                            onClick={props.onExpandStroke}
+                        />
+                        <LabeledIconButton
+                            disabled={!canUnion()}
+                            hideLabel={hideLabel(intl.locale)}
+                            imgSrc={unionIcon}
+                            title={intl.formatMessage(messages.union)}
+                            onClick={props.onUnion}
+                        />
+                        <LabeledIconButton
+                            disabled={!canSubtract()}
+                            hideLabel={hideLabel(intl.locale)}
+                            imgSrc={subtractIcon}
+                            title={intl.formatMessage(messages.subtract)}
+                            onClick={props.onSubtract}
+                        />
+                    </InputGroup>
+                </MediaQuery> : null
+            }`
+        ],
+        // Add propTypes for the new handlers
+        [
+            `    onUngroup: PropTypes.func.isRequired,`,
+            `    onUngroup: PropTypes.func.isRequired,
+    onExpandStroke: PropTypes.func.isRequired,
+    onUnion: PropTypes.func.isRequired,
+    onSubtract: PropTypes.func.isRequired,`
         ]
     ]);
 

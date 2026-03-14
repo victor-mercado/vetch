@@ -11,11 +11,15 @@
 * **Fully Visual SVG Editing:** No need to manually edit tags; just draw, drag, and drop like a normal human being.
 * **Familiar Interface:** Utilizes the intuitive and simple Scratch 3.0 vector paint editor as a base with more powerful features listed below.
 * **Infinite Canvas:** Easily adjust, scale, skew, rotate, and move elements around without boundaries.
-* **Canvas Panning:** Use SHIFT+DRAG to pan around the canvas.
+* **Canvas Panning:** Use the middle mouse button to pan around the canvas.
 * **Skewing:** Hold CTRL while dragging one of the four midpoints of a selection box to skew shapes.
 * **Opacity and HEX Sliders:** Adjust the opacity and HEX values of selected shapes using the color picker.
 * **Dark/Light Canvas Toggle:** Toggle between a light and dark canvas to make editing easier depending on your color schemes.
 * **Snapping:** Switch between freehand mode and snapping mode to easily align shapes.
+* **Boolean Operations:** Use the union and difference tools to combine, subtract, and intersect shapes.
+* **Expand Stroke:** Use the expand stroke tool to solidify outlines and edit them as geometric shapes.
+* **Copy/Pasting Between Editors:** Copy and paste between open Vetch instances to easily transfer shapes.
+* **Transfer between Vetch and Scratch:** Transformation offsets from the origin and preserved between Vetch and Scratch.
 
 ![Screenshot of Vetch editor.](screenshot.png)
 

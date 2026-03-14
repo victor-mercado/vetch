@@ -15,7 +15,10 @@ export default {
         publicPath: ''
     },
     resolve: {
-        extensions: ['.js', '.jsx']
+        extensions: ['.js', '.jsx'],
+        alias: {
+            'paper': '@scratch/paper'
+        }
     },
     module: {
         rules: [
