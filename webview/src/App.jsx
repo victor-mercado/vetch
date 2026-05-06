@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Provider } from 'react-intl-redux';
 import { legacy_createStore as createStore, combineReducers } from 'redux';
 import { intlReducer } from 'react-intl-redux';
@@ -48,6 +48,23 @@ function App() {
   const [imageId, setImageId] = useState('0');
   const [rotationCenterX, setRotationCenterX] = useState(undefined);
   const [rotationCenterY, setRotationCenterY] = useState(undefined);
+  const cameraRestoredRef = useRef(false);
+  const cameraSaveTimerRef = useRef(null);
+
+  // Debounced save of camera state to extension
+  const saveCameraState = useCallback(() => {
+    if (!vscode || !paper.view) return;
+    if (cameraSaveTimerRef.current) {
+      clearTimeout(cameraSaveTimerRef.current);
+    }
+    cameraSaveTimerRef.current = setTimeout(() => {
+      const zoom = paper.view.zoom;
+      const center = paper.view.center;
+      vscode.postMessage({ type: 'saveSetting', setting: 'cameraZoom', value: zoom });
+      vscode.postMessage({ type: 'saveSetting', setting: 'cameraX', value: center.x });
+      vscode.postMessage({ type: 'saveSetting', setting: 'cameraY', value: center.y });
+    }, 300);
+  }, []);
 
   useEffect(() => {
     const handleMessage = event => {
@@ -157,6 +174,7 @@ function App() {
       if (isPanning && (e.button === 1 || e.buttons === 0)) {
         isPanning = false;
         document.body.style.cursor = '';
+        saveCameraState();
       }
     };
 
@@ -178,7 +196,64 @@ function App() {
       window.removeEventListener('mouseup', handleMouseUp, true);
       window.removeEventListener('auxclick', handleAuxClick, true);
     };
+  }, [saveCameraState]);
+
+  // Restore persisted camera state or center the view on first load
+  useEffect(() => {
+    const waitForPaper = () => {
+      if (!paper.view || !paper.project) {
+        setTimeout(waitForPaper, 50);
+        return;
+      }
+
+      // Wait a frame for scratch-paint to finish its own initial layout
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (cameraRestoredRef.current) return;
+          cameraRestoredRef.current = true;
+
+          const settings = window.vetchSettings || {};
+          const hasPersistedCamera =
+            settings.cameraZoom != null &&
+            settings.cameraX != null &&
+            settings.cameraY != null;
+
+          if (hasPersistedCamera) {
+            // Restore persisted camera state
+            paper.view.zoom = settings.cameraZoom;
+            paper.view.center = new paper.Point(settings.cameraX, settings.cameraY);
+          } else {
+            // Center the view on the artboard (480x360, centered at 240,180)
+            paper.view.center = new paper.Point(240, 180);
+          }
+        });
+      });
+    };
+    waitForPaper();
   }, []);
+
+  // Track zoom changes from scratch-paint's own zoom controls (buttons/keyboard)
+  useEffect(() => {
+    let lastZoom = null;
+    let lastCenterX = null;
+    let lastCenterY = null;
+
+    const interval = setInterval(() => {
+      if (!paper.view) return;
+      const zoom = paper.view.zoom;
+      const cx = paper.view.center.x;
+      const cy = paper.view.center.y;
+
+      if (zoom !== lastZoom || cx !== lastCenterX || cy !== lastCenterY) {
+        lastZoom = zoom;
+        lastCenterX = cx;
+        lastCenterY = cy;
+        saveCameraState();
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [saveCameraState]);
 
   const handleUpdateImage = (isVector, image, centerX, centerY) => {
     if (vscode && isVector) {

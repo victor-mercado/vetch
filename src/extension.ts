@@ -109,7 +109,10 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
                 <script>
                     window.vetchSettings = {
                         snapOn: ${this.context.globalState.get('vetch.snapOn', true)},
-                        isDarkMode: ${this.context.globalState.get('vetch.isDarkMode', false)}
+                        isDarkMode: ${this.context.globalState.get('vetch.isDarkMode', false)},
+                        cameraZoom: ${JSON.stringify(this.context.globalState.get('vetch.cameraZoom', null))},
+                        cameraX: ${JSON.stringify(this.context.globalState.get('vetch.cameraX', null))},
+                        cameraY: ${JSON.stringify(this.context.globalState.get('vetch.cameraY', null))}
                     };
                 </script>
             </head>
