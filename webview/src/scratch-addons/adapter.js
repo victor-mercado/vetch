@@ -120,23 +120,35 @@ export const createAdapter = (store, addonId = "default") => {
                 },
                 waitForElement: async (selector, opts) => {
                     return new Promise(resolve => {
-                        const check = () => {
+                        const find = () => {
                             const elements = document.querySelectorAll(selector);
                             for (const el of elements) {
                                 if (opts?.markAsSeen) {
                                     if (!el.dataset[`saMarkedAsSeen_${addonId}`]) {
                                         el.dataset[`saMarkedAsSeen_${addonId}`] = "true";
-                                        resolve(el);
-                                        return;
+                                        return el;
                                     }
                                 } else {
-                                    resolve(el);
-                                    return;
+                                    return el;
                                 }
                             }
-                            setTimeout(check, 100);
+                            return null;
                         };
-                        check();
+                        const found = find();
+                        if (found) {
+                            resolve(found);
+                            return;
+                        }
+                        // Watch the DOM instead of polling so addon UI (e.g. the opacity slider) is inserted
+                        // before the next paint and appears together with the menu it belongs to
+                        const observer = new MutationObserver(() => {
+                            const el = find();
+                            if (el) {
+                                observer.disconnect();
+                                resolve(el);
+                            }
+                        });
+                        observer.observe(document.documentElement, { childList: true, subtree: true });
                     });
                 },
                 appendToSharedSpace: ({ space, element, order }) => {

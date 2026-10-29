@@ -19,14 +19,31 @@ const fontsPath = path.join(basePath, 'lib/fonts.js');
 const fontDropdownPath = path.join(basePath, 'components/font-dropdown/font-dropdown.jsx');
 const fontReducerPath = path.join(basePath, 'reducers/font.js');
 const layoutConstantsPath = path.join(basePath, 'lib/layout-constants.js');
-const fillToolPath = path.join(basePath, 'helper/tools/fill-tool.js');
 const copyPasteHocPath = path.join(basePath, 'hocs/copy-paste-hoc.jsx');
 const bbToolPath = path.join(basePath, 'helper/selection-tools/bounding-box-tool.js');
 const modeToolsPath = path.join(basePath, 'components/mode-tools/mode-tools.jsx');
 const fixedToolsComponentPath = path.join(basePath, 'components/fixed-tools/fixed-tools.jsx');
 const fixedToolsContainerPath = path.join(basePath, 'containers/fixed-tools.jsx');
+const fixedToolsCssPath = path.join(basePath, 'components/fixed-tools/fixed-tools.css');
 const fixedToolsIconsDir = path.join(basePath, 'components/fixed-tools/icons');
+const colorStyleReducerPath = path.join(basePath, 'lib/make-color-style-reducer.js');
+const fillStylePath = path.join(basePath, 'reducers/fill-style.js');
+const colorPickerContainerPath = path.join(basePath, 'containers/color-picker.jsx');
+const colorIndicatorPath = path.join(basePath, 'containers/color-indicator.jsx');
+const colorButtonPath = path.join(basePath, 'components/color-button/color-button.jsx');
+const colorsCssPath = path.join(basePath, 'css/colors.css');
+const reshapeToolPath = path.join(basePath, 'helper/selection-tools/reshape-tool.js');
+const textToolPath = path.join(basePath, 'helper/tools/text-tool.js');
+const textModePath = path.join(basePath, 'containers/text-mode.jsx');
+const paintEditorComponentPath = path.join(basePath, 'components/paint-editor/paint-editor.jsx');
+const keyboardShortcutsHocPath = path.join(basePath, 'hocs/keyboard-shortcuts-hoc.jsx');
+const strokeWidthContainerPath = path.join(basePath, 'containers/stroke-width-indicator.jsx');
+const strokeWidthComponentPath = path.join(basePath, 'components/stroke-width-indicator.jsx');
 const vetchIconsDir = path.resolve(__dirname, 'src/icons');
+
+// Vetch theme colors
+const VETCH_VIOLET = '#DC00FF';
+const SCRATCH_PURPLE = /#855cd6/gi;
 
 function patchFile(filePath, label, replacements) {
     if (!fs.existsSync(filePath)) {
@@ -40,6 +57,8 @@ function patchFile(filePath, label, replacements) {
                 if (!content.includes(replace)) {
                     content = content.split(search).join(replace);
                 }
+            } else if (!content.includes(replace)) {
+                console.warn(`[patch.js] WARN: ${label}: search text not found:\n${search.split('\n')[0]}`);
             }
         } else {
             // For regex, we don't do a strict include check but we can assume regexes are designed carefully
@@ -151,7 +170,7 @@ try {
         ]
     ]);
 
-    // ── point-tool.js ──  
+    // ── point-tool.js ──
     // Remove action bounds clamping from point dragging
     patchFile(pointPath, 'point-tool.js', [
         [
@@ -159,6 +178,37 @@ try {
             `const point = event.point;
         const bounds = getActionBounds();
         // pSVG: point clamping removed for unbounded canvas`
+        ],
+        // Midpoint clicks (see reshape-tool.js) split the curve halfway along its length
+        [
+            `import {HANDLE_RATIO, snapDeltaToAngle} from '../math';`,
+            `import {HANDLE_RATIO, snapDeltaToAngle} from '../math';
+import {divideCurveAtMidpoint} from '../point-tools';`
+        ],
+        [
+            `        const newSegment = hitProperties.hitResult.item.divideAt(hitProperties.hitResult.location);`,
+            `        // pSVG: Midpoint clicks add the point exactly halfway between the curve's two points
+        const newSegment = hitProperties.midpoint ?
+            divideCurveAtMidpoint(hitProperties.hitResult.location.curve) :
+            hitProperties.hitResult.item.divideAt(hitProperties.hitResult.location);`
+        ]
+    ]);
+
+    // ── reshape-tool.js ──
+    // Shift-click on a selected shape's outline adds a point centered between its two neighbors
+    patchFile(reshapeToolPath, 'reshape-tool.js', [
+        [
+            `            hitResult.type === 'curve') {
+            this.mode = ReshapeModes.POINT;
+            this._modeMap[this.mode].addPoint(hitProperties);`,
+            `            hitResult.type === 'curve') {
+            this.mode = ReshapeModes.POINT;
+            // pSVG: Shift-click adds the point at the curve's midpoint and selects only that point
+            if (event.modifiers.shift) {
+                hitProperties.midpoint = true;
+                hitProperties.multiselect = false;
+            }
+            this._modeMap[this.mode].addPoint(hitProperties);`
         ]
     ]);
 
@@ -168,6 +218,127 @@ try {
         [
             'zoomOnSelection(-PaintEditor.ZOOM_INCREMENT);',
             '// pSVG zoom slower\n        const centerPoint = paper.project.view.center;\n        zoomOnSelection(Math.max(-paper.view.zoom / 2, -PaintEditor.ZOOM_INCREMENT));'
+        ]
+    ]);
+
+    // ── text-mode.jsx ──
+    // New text is drawn with the fill color only, so a transparent fill (e.g. right after selecting
+    // an outline-only line) made typed text invisible. Fall back to the outline color or the default.
+    patchFile(textModePath, 'text-mode.jsx', [
+        [
+            `        const fillColorPresent = fillColor !== MIXED && fillColor !== null;`,
+            `        // pSVG: A fully transparent fill counts as no fill
+        const fillColorPresent = fillColor !== MIXED && fillColor !== null && new paper.Color(fillColor).alpha > 0;`
+        ],
+        [
+            `        if (!fillColorPresent && !strokeColorPresent) {
+            this.props.onChangeFillColor(DEFAULT_COLOR);
+            this.props.onChangeStrokeColor(null);
+        } else if (!fillColorPresent && strokeColorPresent) {
+            this.props.onChangeFillColor(null);
+        } else if (fillColorPresent && !strokeColorPresent) {
+            this.props.onChangeStrokeColor(null);
+        }`,
+            `        // pSVG: Never start typing with an invisible fill; borrow the outline color if there is one
+        if (!fillColorPresent) {
+            this.props.onChangeFillColor(strokeColorPresent ? strokeColor : DEFAULT_COLOR);
+            this.props.onChangeStrokeColor(null);
+        } else if (!strokeColorPresent) {
+            this.props.onChangeStrokeColor(null);
+        }`
+        ]
+    ]);
+
+    // ── text-tool.js ──
+    // Redraw the canvas as soon as the text changes instead of waiting for paper's next animation
+    // frame, so the drawn text never lags behind (or disagrees with) the hidden textarea being typed in.
+    patchFile(textToolPath, 'text-tool.js', [
+        [
+            `        if (this.mode === TextTool.TEXT_EDIT_MODE) {
+            this.textBox.content = this.element.value;
+        }
+        this.resizeGuide();
+    }`,
+            `        if (this.mode === TextTool.TEXT_EDIT_MODE) {
+            this.textBox.content = this.element.value;
+        }
+        this.resizeGuide();
+        // pSVG: Draw immediately so added/deleted characters show up right away
+        paper.view.update();
+    }`
+        ]
+    ]);
+
+    // ── paint-editor.jsx (component) ──
+    // The hidden textarea used for text editing shouldn't get OS autocorrect/autocapitalize (macOS)
+    patchFile(paintEditorComponentPath, 'paint-editor component', [
+        [
+            `                            ref={props.setTextArea}
+                            spellCheck={false}`,
+            `                            autoCapitalize="off"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            ref={props.setTextArea}
+                            spellCheck={false}`
+        ]
+    ]);
+
+    // ── keyboard-shortcuts-hoc.jsx ──
+    // In VS Code, Cmd/Ctrl+V while a number field (e.g. the outline width) has focus pastes the Vetch
+    // clipboard JSON into it as text, which the field reads as a tiny number like 8e-3003503...
+    // Paste shapes onto the canvas instead unless the clipboard actually holds a number.
+    patchFile(keyboardShortcutsHocPath, 'keyboard-shortcuts-hoc.jsx', [
+        [
+            `            bindAll(this, [
+                'handleKeyPress',
+                'changeToASelectMode',
+                'selectAll'
+            ]);
+        }`,
+            `            bindAll(this, [
+                'handleKeyPress',
+                'handleNumberInputPaste',
+                'changeToASelectMode',
+                'selectAll'
+            ]);
+        }
+        componentDidMount () {
+            document.addEventListener('paste', this.handleNumberInputPaste, true);
+        }
+        componentWillUnmount () {
+            document.removeEventListener('paste', this.handleNumberInputPaste, true);
+        }
+        handleNumberInputPaste (event) {
+            // pSVG: Only let real numbers be pasted into number fields; anything else is a shape paste
+            const target = event.target;
+            if (!(target instanceof HTMLInputElement) || target.type !== 'number') return;
+            const text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
+            if (/^\\s*[-+]?(\\d+\\.?\\d*|\\.\\d+)\\s*$/.test(text)) return;
+            event.preventDefault();
+            target.blur();
+            this.changeToASelectMode();
+            this.props.onPasteFromClipboard();
+        }`
+        ]
+    ]);
+
+    // ── stroke-width-indicator.jsx (container + component) ──
+    // Keep outline widths to 2 decimals so stray values can't become microscopic widths,
+    // and show long decimals (e.g. from imported SVGs) rounded
+    patchFile(strokeWidthContainerPath, 'stroke-width-indicator container', [
+        [
+            `    handleChangeStrokeWidth (newWidth) {
+        let changed`,
+            `    handleChangeStrokeWidth (newWidth) {
+        // pSVG: Round to 2 decimals
+        newWidth = Math.round(newWidth * 100) / 100;
+        let changed`
+        ]
+    ]);
+    patchFile(strokeWidthComponentPath, 'stroke-width-indicator component', [
+        [
+            `            value={props.strokeWidth ? props.strokeWidth : 0}`,
+            `            value={props.strokeWidth ? Math.round(props.strokeWidth * 100) / 100 : 0}`
         ]
     ]);
 
@@ -257,34 +428,129 @@ try {
         ]
     ]);
 
-    // ── fill-tool.js ──
-    // Apply opacity from slider only on click (handleMouseUp), not during hover preview.
-    // We do NOT modify _setFillItemColor — it stays vanilla so hover/unhover color restoration works correctly.
-    // Instead, we apply opacity directly on the item's color property in handleMouseUp before committing.
-    patchFile(fillToolPath, 'fill-tool.js', [
+    // ── make-color-style-reducer.js ──
+    // Accept rgb()/rgba() colors (not just hex) so the fill/outline colors in Redux can carry opacity.
+    // The fill tool, color swatches and opacity slider all read their color from Redux.
+    patchFile(colorStyleReducerPath, 'make-color-style-reducer.js', [
         [
-            `    handleMouseUp (event) {
-        if (event.event.button > 0) return; // only first mouse button
-        if (this.fillItem) {`,
-            `    handleMouseUp (event) {
-        if (event.event.button > 0) return; // only first mouse button
-        if (this.fillItem) {
-            // pSVG: Apply opacity from slider directly on the item's color before committing
-            const opacityAlpha = (typeof window !== 'undefined' && window.scratchAddons &&
-                typeof window.scratchAddons.opacitySliderAlpha === 'number')
-                ? window.scratchAddons.opacitySliderAlpha : null;
-            if (opacityAlpha !== null) {
-                const colorProp = this.fillProperty === 'fill' ? 'fillColor' : 'strokeColor';
-                const fillItem = this._getFillItem();
-                if (fillItem && fillItem[colorProp]) {
-                    fillItem[colorProp] = new paper.Color({
-                        red: fillItem[colorProp].red,
-                        green: fillItem[colorProp].green,
-                        blue: fillItem[colorProp].blue,
-                        alpha: opacityAlpha
+            'const hexRegex = /^#([0-9a-f]{3}){1,2}$/i;',
+            '// pSVG: Also accept rgb()/rgba() so colors keep their opacity\nconst hexRegex = /^(#([0-9a-f]{3}){1,2}|rgba?\\([\\d\\s.,%]+\\))$/i;'
+        ]
+    ]);
+
+    // ── fill-style.js ──
+    // Default fill color is red
+    patchFile(fillStylePath, 'fill-style.js', [
+        [
+            `const DEFAULT_COLOR = '#9966FF';`,
+            `const DEFAULT_COLOR = '#FF0000';`
+        ]
+    ]);
+
+    // ── color-picker.jsx (container) ──
+    patchFile(colorPickerContainerPath, 'color-picker container', [
+        // Expose the open picker so the HEX and opacity addons can set colors directly
+        // (and keep the HSV sliders in sync) instead of faking an eyedropper pick
+        [
+            `    getHsv (color) {`,
+            `    componentDidMount () {
+        window.vetchColorPicker = this;
+    }
+    componentWillUnmount () {
+        if (window.vetchColorPicker === this) window.vetchColorPicker = null;
+    }
+    setColor (color) {
+        const hsv = this.getHsv(color);
+        this.setState({
+            hue: hsv[0],
+            saturation: hsv[1],
+            brightness: hsv[2]
+        });
+        this.props.onChangeColor(color);
+    }
+    getHsv (color) {`
+        ],
+        // Keep the current opacity when the hue/saturation/brightness sliders move
+        [
+            `    handleColorChange () {
+        this.props.onChangeColor(hsvToHex(
+            this.state.hue,
+            this.state.saturation,
+            this.state.brightness
+        ));
+    }`,
+            `    handleColorChange () {
+        const hex = hsvToHex(
+            this.state.hue,
+            this.state.saturation,
+            this.state.brightness
+        );
+        // pSVG: Keep the current opacity when the hue/saturation/brightness sliders move
+        const current = this.props.colorIndex === 0 ? this.props.color : this.props.color2;
+        const alpha = current && current !== MIXED ? parseColor(current).rgba[3] : 1;
+        if (alpha < 1) {
+            const [r, g, b] = parseColor(hex).rgb;
+            this.props.onChangeColor('rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')');
+        } else {
+            this.props.onChangeColor(hex);
+        }
+    }`
+        ],
+        // Use the browser's EyeDropper when available so colors can be picked from anywhere on
+        // screen, not just inside the paint canvas. Falls back to Scratch's canvas eyedropper.
+        [
+            `    handleActivateEyeDropper () {
+        this.props.onActivateEyeDropper(`,
+            `    handleActivateEyeDropper () {
+        // pSVG: Pick from anywhere on screen with the native EyeDropper when it's available
+        if (typeof window.EyeDropper === 'function' && !this.props.isEyeDropping) {
+            const useCanvasEyeDropper = () => this.props.onActivateEyeDropper(paper.tool, this.props.onChangeColor);
+            try {
+                new window.EyeDropper().open()
+                    .then(result => this.setColor(result.sRGBHex))
+                    .catch(err => {
+                        // AbortError means the user cancelled (e.g. pressed Escape)
+                        if (!err || err.name !== 'AbortError') useCanvasEyeDropper();
                     });
-                }
-            }`
+            } catch (err) {
+                useCanvasEyeDropper();
+            }
+            return;
+        }
+        this.props.onActivateEyeDropper(`
+        ]
+    ]);
+
+    // ── color-indicator.jsx ──
+    // Swapping gradient colors without a selection converted them to hex, dropping their opacity
+    patchFile(colorIndicatorPath, 'color-indicator.jsx', [
+        [
+            `                color1 = color1 === null || color1 === MIXED ? color1 : parseColor(color1).hex;
+                color2 = color2 === null || color2 === MIXED ? color2 : parseColor(color2).hex;
+`,
+            `                // pSVG: Colors may carry opacity, so swap them as-is instead of converting to hex
+`
+        ]
+    ]);
+
+    // ── color-button.jsx ──
+    // Draw the Fill/Outline swatches over a checkerboard so their opacity is visible
+    patchFile(colorButtonPath, 'color-button.jsx', [
+        [
+            `const ColorButtonComponent = props => (`,
+            `// pSVG: Layer the swatch color over a checkerboard so semi-transparent colors read as such
+const CHECKERBOARD = 'repeating-conic-gradient(#d9d9d9 0% 25%, #ffffff 0% 50%) 50% / 10px 10px';
+const withCheckerboard = background => {
+    if (!background || background === 'white') return background;
+    const colorLayer = background.includes('gradient(') ? background : 'linear-gradient(' + background + ', ' + background + ')';
+    return colorLayer + ', ' + CHECKERBOARD;
+};
+
+const ColorButtonComponent = props => (`
+        ],
+        [
+            `                background: colorToBackground(props.color, props.color2, props.gradientType)`,
+            `                background: withCheckerboard(colorToBackground(props.color, props.color2, props.gradientType))`
         ]
     ]);
 
@@ -420,7 +686,7 @@ try {
     ]);
 
     // ── Copy boolean tool icons into scratch-paint icons dir ──
-    const iconsToCopy = ['expand-stroke.svg', 'union.svg', 'subtract.svg'];
+    const iconsToCopy = ['expand-stroke.svg', 'union.svg', 'subtract.svg', 'midpoint.svg'];
     for (const icon of iconsToCopy) {
         const src = path.join(vetchIconsDir, icon);
         const dst = path.join(fixedToolsIconsDir, icon);
@@ -438,14 +704,23 @@ try {
     }
     console.log('[patch.js] Copied boolean-tools.js');
 
+    // ── Copy point-tools.js helper (midpoint insertion) into scratch-paint ──
+    const pointToolsSrc = path.resolve(__dirname, 'src/point-tools.js');
+    const pointToolsDst = path.join(basePath, 'helper/point-tools.js');
+    if (fs.existsSync(pointToolsSrc)) {
+        fs.copyFileSync(pointToolsSrc, pointToolsDst);
+    }
+    console.log('[patch.js] Copied point-tools.js');
+
     // ── fixed-tools.jsx (container) ──
-    // Add handlers for Expand Stroke, Union, and Subtract
+    // Add handlers for Expand Stroke, Union, Subtract and Midpoint
     patchFile(fixedToolsContainerPath, 'fixed-tools container', [
         // Add imports for boolean tools
         [
             `import {bringToFront, sendBackward, sendToBack, bringForward} from '../helper/order';`,
             `import {bringToFront, sendBackward, sendToBack, bringForward} from '../helper/order';
-import {expandStroke, unionItems, subtractItems, canExpandStroke, canUnion, canSubtract} from '../helper/boolean-tools';`
+import {expandStroke, unionItems, subtractItems, canExpandStroke, canUnion, canSubtract} from '../helper/boolean-tools';
+import {insertMidpoint} from '../helper/point-tools';`
         ],
         // Add handler methods to bindAll
         [
@@ -468,7 +743,8 @@ import {expandStroke, unionItems, subtractItems, canExpandStroke, canUnion, canS
             'handleUngroup',
             'handleExpandStroke',
             'handleUnion',
-            'handleSubtract'
+            'handleSubtract',
+            'handleMidpoint'
         ]);`
         ],
         // Add handler method implementations after handleUngroup
@@ -483,6 +759,9 @@ import {expandStroke, unionItems, subtractItems, canExpandStroke, canUnion, canS
     handleSubtract () {
         subtractItems(this.props.clearSelectedItems, this.handleSetSelectedItems, this.props.onUpdateImage);
     }
+    handleMidpoint () {
+        insertMidpoint(this.handleSetSelectedItems, this.props.onUpdateImage);
+    }
     handleSendBackward () {`
         ],
         // Pass new handlers as props in render
@@ -491,12 +770,32 @@ import {expandStroke, unionItems, subtractItems, canExpandStroke, canUnion, canS
             `                onUngroup={this.handleUngroup}
                 onExpandStroke={this.handleExpandStroke}
                 onUnion={this.handleUnion}
-                onSubtract={this.handleSubtract}`
+                onSubtract={this.handleSubtract}
+                onMidpoint={this.handleMidpoint}`
+        ]
+    ]);
+
+    // ── fixed-tools.css ──
+    // Dashed separator on the start side, used to set the boolean tools apart from Front/Back
+    patchFile(fixedToolsCssPath, 'fixed-tools.css', [
+        [
+            `.mod-unselect {`,
+            `[dir="ltr"] .mod-dashed-border-start {
+    border-left: 1px dashed $ui-pane-border;
+    padding-left: calc(2 * $grid-unit);
+}
+
+[dir="rtl"] .mod-dashed-border-start {
+    border-right: 1px dashed $ui-pane-border;
+    padding-right: calc(2 * $grid-unit);
+}
+
+.mod-unselect {`
         ]
     ]);
 
     // ── fixed-tools.jsx (component) ──
-    // Add boolean tool buttons to the toolbar
+    // Add boolean tool buttons (and Midpoint, in point selection mode) to the toolbar
     patchFile(fixedToolsComponentPath, 'fixed-tools component', [
         // Add icon imports
         [
@@ -505,8 +804,11 @@ import {expandStroke, unionItems, subtractItems, canExpandStroke, canUnion, canS
 import expandStrokeIcon from './icons/expand-stroke.svg';
 import unionIcon from './icons/union.svg';
 import subtractIcon from './icons/subtract.svg';
+import midpointIcon from './icons/midpoint.svg';
 
-import {canExpandStroke, canUnion, canSubtract} from '../../helper/boolean-tools';`
+import {canExpandStroke, canUnion, canSubtract} from '../../helper/boolean-tools';
+import {canInsertMidpoint} from '../../helper/point-tools';
+import Modes from '../../lib/modes';`
         ],
         // Add message definitions
         [
@@ -534,6 +836,11 @@ import {canExpandStroke, canUnion, canSubtract} from '../../helper/boolean-tools
         defaultMessage: 'Subtract',
         description: 'Label for the button to subtract shapes',
         id: 'paint.paintEditor.subtract'
+    },
+    midpoint: {
+        defaultMessage: 'Midpoint',
+        description: 'Label for the button to add a point halfway between two selected points',
+        id: 'paint.paintEditor.midpoint'
     }`
         ],
         // Add buttons after the Back button section (after the InputGroup that contains Front/Back)
@@ -558,7 +865,7 @@ import {canExpandStroke, canUnion, canSubtract} from '../../helper/boolean-tools
                             onClick={function () {}}
                         />
                     </InputGroup> */}
-                    <InputGroup className={styles.modDashedBorder}>
+                    <InputGroup className={styles.modDashedBorderStart}>
                         <LabeledIconButton
                             disabled={!canExpandStroke()}
                             hideLabel={hideLabel(intl.locale)}
@@ -580,6 +887,14 @@ import {canExpandStroke, canUnion, canSubtract} from '../../helper/boolean-tools
                             title={intl.formatMessage(messages.subtract)}
                             onClick={props.onSubtract}
                         />
+                        {props.mode === Modes.RESHAPE && canInsertMidpoint() ?
+                            <LabeledIconButton
+                                hideLabel={hideLabel(intl.locale)}
+                                imgSrc={midpointIcon}
+                                title={intl.formatMessage(messages.midpoint)}
+                                onClick={props.onMidpoint}
+                            /> : null
+                        }
                     </InputGroup>
                 </MediaQuery> : null
             }`
@@ -590,9 +905,50 @@ import {canExpandStroke, canUnion, canSubtract} from '../../helper/boolean-tools
             `    onUngroup: PropTypes.func.isRequired,
     onExpandStroke: PropTypes.func.isRequired,
     onUnion: PropTypes.func.isRequired,
-    onSubtract: PropTypes.func.isRequired,`
+    onSubtract: PropTypes.func.isRequired,
+    onMidpoint: PropTypes.func.isRequired,
+    mode: PropTypes.oneOf(Object.keys(Modes)),`
+        ],
+        // Re-render when the mode changes so Midpoint shows up only in point selection mode
+        [
+            `    rtl: state.scratchPaint.layout.rtl,
+    selectedItems: state.scratchPaint.selectedItems,
+    undoState: state.scratchPaint.undo`,
+            `    mode: state.scratchPaint.mode,
+    rtl: state.scratchPaint.layout.rtl,
+    selectedItems: state.scratchPaint.selectedItems,
+    undoState: state.scratchPaint.undo`
         ]
     ]);
+
+    // ── Vetch theme ──
+    // Replace Scratch's purple accent with Vetch violet. Filled accents (selected tool, Convert button,
+    // focus rings) use a slightly deeper violet so white icons/text on them stay readable.
+    patchFile(colorsCssPath, 'colors.css', [
+        [
+            '$looks-secondary: #855CD6;',
+            '$looks-secondary: #C000E0; /* pSVG: Vetch violet */'
+        ],
+        [
+            '$looks-transparent: hsla(260, 60%, 60%, 0.35); /* 35% transparent version of looks-secondary */',
+            '$looks-transparent: rgba(220, 0, 255, 0.35); /* pSVG: 35% transparent Vetch violet */'
+        ]
+    ]);
+    // Recolor every scratch-paint icon that uses the Scratch purple
+    const recolorSvgs = dir => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                recolorSvgs(fullPath);
+            } else if (entry.name.endsWith('.svg')) {
+                const content = fs.readFileSync(fullPath, 'utf8');
+                const recolored = content.replace(SCRATCH_PURPLE, VETCH_VIOLET);
+                if (recolored !== content) fs.writeFileSync(fullPath, recolored);
+            }
+        }
+    };
+    recolorSvgs(path.join(basePath, 'components'));
+    console.log('[patch.js] Recolored icons to Vetch violet');
 
 } catch (error) {
     console.error('[patch.js] Failed:', error);

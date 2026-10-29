@@ -1,4 +1,8 @@
 import { setSnapFrom, setSnapTo, snapOn, snapFrom, snapTo, toggle, threshold, setThreshold } from "./state.js";
+import snapOnIcon from "../../icons/snap-on.svg";
+import snapOffIcon from "../../icons/snap-off.svg";
+import canvasDarkIcon from "../../icons/canvas-dark.svg";
+import canvasLightIcon from "../../icons/canvas-light.svg";
 
 /** @type {import("../../addon-api/content-script/typedef").UserscriptUtilities} */
 export function initUI({ addon, msg }) {
@@ -18,18 +22,24 @@ export function initUI({ addon, msg }) {
   const controlsGroup = createGroup();
   addon.tab.displayNoneWhileDisabled(controlsGroup);
 
+  const createIcon = () => {
+    const el = document.createElement("img");
+    el.draggable = false;
+    el.style.width = "1.25rem";
+    el.style.height = "1.25rem";
+    el.style.verticalAlign = "middle";
+    el.style.userSelect = "none";
+    return el;
+  };
+
   const toggleButton = createButton();
   const darkModeButton = createButton();
 
-  const magnetIcon = document.createElement("span");
-  magnetIcon.textContent = "🧲";
-  magnetIcon.style.fontSize = "1rem";
-  magnetIcon.style.userSelect = "none";
-  magnetIcon.style.display = "flex";
-  magnetIcon.style.alignItems = "center";
-  magnetIcon.style.justifyContent = "center";
-  magnetIcon.style.width = "100%";
-  magnetIcon.style.height = "100%";
+  const magnetIcon = createIcon();
+  const updateMagnetIcon = () => {
+    magnetIcon.src = snapOn ? snapOnIcon : snapOffIcon;
+    toggleButton.setAttribute("aria-pressed", String(snapOn));
+  };
 
   toggleButton.addEventListener("click", () => {
     if (!snapOn) {
@@ -42,13 +52,11 @@ export function initUI({ addon, msg }) {
     }
     toggle(!snapOn);
     toggleButton.dataset.enabled = snapOn;
-    magnetIcon.style.opacity = snapOn ? "1" : "0.4";
-    magnetIcon.style.filter = snapOn ? "none" : "grayscale(100%)";
+    updateMagnetIcon();
   });
-  toggleButton.title = msg("toggle") || "Toggle Snapping";
+  toggleButton.title = "Toggle Snapping";
 
-  magnetIcon.style.opacity = snapOn ? "1" : "0.4";
-  magnetIcon.style.filter = snapOn ? "none" : "grayscale(100%)";
+  updateMagnetIcon();
 
   toggleButton.appendChild(magnetIcon);
   toggleButton.dataset.enabled = snapOn;
@@ -56,15 +64,12 @@ export function initUI({ addon, msg }) {
 
   let isDarkMode = typeof window !== 'undefined' && window.vetchSettings?.isDarkMode !== undefined ? window.vetchSettings.isDarkMode : false;
   let bgRect = null;
-  const moonIcon = document.createElement("span");
-  moonIcon.textContent = isDarkMode ? "☀️" : "🌙";
-  moonIcon.style.fontSize = "1rem";
-  moonIcon.style.userSelect = "none";
-  moonIcon.style.display = "flex";
-  moonIcon.style.alignItems = "center";
-  moonIcon.style.justifyContent = "center";
-  moonIcon.style.width = "100%";
-  moonIcon.style.height = "100%";
+  const moonIcon = createIcon();
+  const updateMoonIcon = () => {
+    moonIcon.src = isDarkMode ? canvasLightIcon : canvasDarkIcon;
+    darkModeButton.setAttribute("aria-pressed", String(isDarkMode));
+  };
+  updateMoonIcon();
 
   const applyDarkMode = () => {
     if (bgRect) {
@@ -99,11 +104,11 @@ export function initUI({ addon, msg }) {
     if (typeof window !== 'undefined' && window.vscode) {
       window.vscode.postMessage({ type: 'saveSetting', setting: 'isDarkMode', value: isDarkMode });
     }
-    moonIcon.textContent = isDarkMode ? "☀️" : "🌙";
+    updateMoonIcon();
     applyDarkMode();
   });
 
-  darkModeButton.title = msg("toggleDarkMode") || "Toggle Canvas Background";
+  darkModeButton.title = "Toggle Canvas Background";
   darkModeButton.appendChild(moonIcon);
   controlsGroup.appendChild(darkModeButton);
 

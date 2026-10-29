@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 
+// Colors the editor stores for its fill color: hex, rgb() or rgba()
+const COLOR_PATTERN = /^(#([0-9a-f]{3}){1,2}|rgba?\([\d\s.,%]+\))$/i;
+
 export function activate(context: vscode.ExtensionContext) {
     // Register our custom editor provider
     context.subscriptions.push(ScratchEditorProvider.register(context));
@@ -94,6 +97,8 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
     private getHtmlForWebview(webview: vscode.Webview): string {
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'webview', 'dist', 'assets', 'index.js'));
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'webview', 'dist', 'assets', 'index.css'));
+        const savedFillColor = this.context.globalState.get('vetch.fillColor', null);
+        const fillColor = typeof savedFillColor === 'string' && COLOR_PATTERN.test(savedFillColor) ? savedFillColor : null;
 
         return `
             <!DOCTYPE html>
@@ -112,7 +117,8 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
                         isDarkMode: ${this.context.globalState.get('vetch.isDarkMode', false)},
                         cameraZoom: ${JSON.stringify(this.context.globalState.get('vetch.cameraZoom', null))},
                         cameraX: ${JSON.stringify(this.context.globalState.get('vetch.cameraX', null))},
-                        cameraY: ${JSON.stringify(this.context.globalState.get('vetch.cameraY', null))}
+                        cameraY: ${JSON.stringify(this.context.globalState.get('vetch.cameraY', null))},
+                        fillColor: ${JSON.stringify(fillColor)}
                     };
                 </script>
             </head>

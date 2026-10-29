@@ -91,11 +91,9 @@ div[class*="font-dropdown_mod-menu-item_"]>span {
   color: #cccccc !important;
 }
 
-/* Selected button colors */
-div[class*="button_is-active_"],
-button[class*="button_is-active_"] {
-  background-color: #007acc !important;
-  color: #ffffff !important;
+/* Toggled-on buttons (e.g. Filled/Outlined in bitmap mode) use Vetch lime */
+[class*="button_highlighted_"] {
+  background-color: rgba(35, 186, 0, 0.35) !important;
 }
 
 /* Prevent text selection in color picker popup (sliders, labels, readouts) */

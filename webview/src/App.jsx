@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Provider } from 'react-intl-redux';
-import { legacy_createStore as createStore, combineReducers } from 'redux';
+import { legacy_createStore as createStore, combineReducers, applyMiddleware } from 'redux';
 import { intlReducer } from 'react-intl-redux';
 
 // 1. Import the main component normally
@@ -12,13 +12,36 @@ window.paper = paper;
 
 // 2. The Bypass: Reach directly into the package's internal files to grab the reducer
 import paintReducer from 'scratch-paint/src/reducers/scratch-paint-reducer';
+import { changeFillColor } from 'scratch-paint/src/reducers/fill-style';
+
+// Colors the fill state accepts (matches the patched color reducer): hex, rgb() or rgba()
+const COLOR_PATTERN = /^(#([0-9a-f]{3}){1,2}|rgba?\([\d\s.,%]+\))$/i;
+
+// Remember the last fill color the user picked so new editors start with it
+let fillColorSaveTimer = null;
+const persistFillColor = store => next => action => {
+  const result = next(action);
+  if (action.type === 'scratch-paint/fill-style/CHANGE_FILL_COLOR' && typeof action.color === 'string' && COLOR_PATTERN.test(action.color) &&
+      store.getState().scratchPaint.color.fillColor.primary === action.color) {
+    clearTimeout(fillColorSaveTimer);
+    fillColorSaveTimer = setTimeout(() => {
+      if (window.vscode) window.vscode.postMessage({ type: 'saveSetting', setting: 'fillColor', value: action.color });
+    }, 300);
+  }
+  return result;
+};
 
 // 3. Assemble the Redux store with the missing puzzle piece
 const reducers = combineReducers({
   intl: intlReducer,
   scratchPaint: paintReducer
 });
-const rawStore = createStore(reducers);
+const rawStore = createStore(reducers, applyMiddleware(persistFillColor));
+
+const savedFillColor = window.vetchSettings?.fillColor;
+if (typeof savedFillColor === 'string' && COLOR_PATTERN.test(savedFillColor)) {
+  rawStore.dispatch(changeFillColor(savedFillColor));
+}
 
 import { createAdapter } from './scratch-addons/adapter.js';
 import paintSnapSetup from './scratch-addons/paint-snap/userscript.js';
