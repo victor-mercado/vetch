@@ -795,8 +795,34 @@ import {insertMidpoint} from '../helper/point-tools';`
     ]);
 
     // ── fixed-tools.jsx (component) ──
-    // Add boolean tool buttons (and Midpoint, in point selection mode) to the toolbar
+    // Remove the costume name field, and add boolean tool buttons (and Midpoint, in point selection mode)
     patchFile(fixedToolsComponentPath, 'fixed-tools component', [
+        [
+            `            {/* Name field */}
+            <InputGroup>
+                <MediaQuery minWidth={layout.fullSizeEditorMinWidth}>
+                    <Label text={intl.formatMessage(messages.costume)}>
+                        <BufferedInput
+                            className={styles.costumeInput}
+                            type="text"
+                            value={props.name}
+                            onSubmit={props.onUpdateName}
+                        />
+                    </Label>
+                </MediaQuery>
+                <MediaQuery maxWidth={layout.fullSizeEditorMinWidth - 1}>
+                    <BufferedInput
+                        className={styles.costumeInput}
+                        type="text"
+                        value={props.name}
+                        onSubmit={props.onUpdateName}
+                    />
+                </MediaQuery>
+            </InputGroup>
+`,
+            `            {/* pSVG: Costume name field removed (SVG files don't have a costume name) */}
+`
+        ],
         // Add icon imports
         [
             `import ungroupIcon from './icons/ungroup.svg';`,

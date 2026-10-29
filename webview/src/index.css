@@ -31,12 +31,6 @@ html {
 
 /* --- pSVG UI/UX Dark Theme Overrides & Hidden Elements --- */
 
-/* Hide the top-left Costume Object Name input */
-div[class*="fixed-tools_costume-input_"],
-input[class*="fixed-tools_costume-input_"] {
-  display: none !important;
-}
-
 /* Background of the overall editor area (VS Code default dark gray) */
 div[class*="paint-editor_editor-container_"] {
   background-color: #1e1e1e !important;
@@ -47,6 +41,25 @@ div[class*="paint-editor_editor-container_"] {
 div[class*="paper-canvas_canvas-container_"],
 div[class*="scrollable-canvas_canvas-container_"] {
   background-color: #252526 !important;
+}
+
+/* Top toolbars scroll sideways instead of squeezing their buttons when the editor is narrow */
+div[class*="paint-editor_editor-container-top_"] > div {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+div[class*="paint-editor_editor-container-top_"] > div > * {
+  flex-shrink: 0;
+}
+
+/* At this width scratch-paint moves the Fill/Outline labels 1rem above their row; make room for them
+   so the scrolling row doesn't clip them */
+@media only screen and (max-width: 1256px) {
+  div[class*="paint-editor_editor-container-top_"] > div:has(label) {
+    padding-top: 1rem;
+  }
 }
 
 /* Dark mode for main menu toolbars */

@@ -53,6 +53,9 @@ export function initUI({ addon, msg }) {
     toggle(!snapOn);
     toggleButton.dataset.enabled = snapOn;
     updateMagnetIcon();
+    if (typeof window !== 'undefined' && window.vscode) {
+      window.vscode.postMessage({ type: 'saveSetting', setting: 'snapOn', value: snapOn });
+    }
   });
   toggleButton.title = "Toggle Snapping";
 
@@ -111,6 +114,20 @@ export function initUI({ addon, msg }) {
   darkModeButton.title = "Toggle Canvas Background";
   darkModeButton.appendChild(moonIcon);
   controlsGroup.appendChild(darkModeButton);
+
+  // Follow snapping and canvas background changes made in other Vetch editors
+  window.addEventListener("vetch-settings", ({ detail }) => {
+    if (typeof detail.snapOn === "boolean" && detail.snapOn !== snapOn) {
+      toggle(detail.snapOn);
+      toggleButton.dataset.enabled = snapOn;
+      updateMagnetIcon();
+    }
+    if (typeof detail.isDarkMode === "boolean" && detail.isDarkMode !== isDarkMode) {
+      isDarkMode = detail.isDarkMode;
+      updateMoonIcon();
+      applyDarkMode();
+    }
+  });
 
   const controlsLoop = async () => {
     let hasRunOnce = false;

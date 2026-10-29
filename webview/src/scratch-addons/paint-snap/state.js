@@ -78,9 +78,6 @@ export function disable() {
 export function toggle(enabled) {
   if (enabled) enable();
   else disable();
-  if (typeof window !== 'undefined' && window.vscode) {
-    window.vscode.postMessage({ type: 'saveSetting', setting: 'snapOn', value: snapOn });
-  }
 }
 
 export function setGuideColor(hex) {

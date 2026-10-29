@@ -43,11 +43,22 @@ export function canExpandStroke() {
 }
 
 /**
- * Check if union can be performed (need 2+ selected items).
+ * Check if an item is a line: an open path with no visible fill.
+ */
+function isLine(item) {
+    return item instanceof paper.Path &&
+        !item.closed &&
+        !(item.fillColor && item.fillColor.alpha > 0);
+}
+
+/**
+ * Check if union can be performed (need 2+ selected items, no groups, and not only lines).
  */
 export function canUnion() {
     const items = getSelectedRootItems();
-    return items.length >= 2;
+    return items.length >= 2 &&
+        !items.some(item => item instanceof paper.Group) &&
+        !items.every(isLine);
 }
 
 /**
@@ -154,8 +165,8 @@ function _createExpandedStroke(path, strokeWidth) {
  * Uses the topmost item's fill and stroke style.
  */
 export function unionItems(clearSelectedItems, setSelectedItems, onUpdateImage) {
+    if (!canUnion()) return;
     const items = getSelectedRootItems();
-    if (items.length < 2) return;
 
     // Items are sorted by z-index (ascending), so last is topmost
     const topItem = items[items.length - 1];

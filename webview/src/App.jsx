@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Provider } from 'react-intl-redux';
 import { legacy_createStore as createStore, combineReducers, applyMiddleware } from 'redux';
 import { intlReducer } from 'react-intl-redux';
@@ -12,21 +12,26 @@ window.paper = paper;
 
 // 2. The Bypass: Reach directly into the package's internal files to grab the reducer
 import paintReducer from 'scratch-paint/src/reducers/scratch-paint-reducer';
-import { changeFillColor } from 'scratch-paint/src/reducers/fill-style';
+import { updateViewBounds } from 'scratch-paint/src/reducers/view-bounds';
+import { CENTER, resizeCrosshair, setWorkspaceBounds } from 'scratch-paint/src/helper/view';
+import { getEditorState, applyEditorState } from './editor-state.js';
 
-// Colors the fill state accepts (matches the patched color reducer): hex, rgb() or rgba()
-const COLOR_PATTERN = /^(#([0-9a-f]{3}){1,2}|rgba?\([\d\s.,%]+\))$/i;
-
-// Remember the last fill color the user picked so new editors start with it
-let fillColorSaveTimer = null;
-const persistFillColor = store => next => action => {
+// Share the editor state (tool, colors, sizes) with the other open Vetch editors whenever it changes.
+// Sharing starts once this editor has received the shared state, so its defaults never overwrite it.
+const editorStateSync = { ready: false, applying: false, last: null, json: null, timer: null };
+const shareEditorState = store => next => action => {
   const result = next(action);
-  if (action.type === 'scratch-paint/fill-style/CHANGE_FILL_COLOR' && typeof action.color === 'string' && COLOR_PATTERN.test(action.color) &&
-      store.getState().scratchPaint.color.fillColor.primary === action.color) {
-    clearTimeout(fillColorSaveTimer);
-    fillColorSaveTimer = setTimeout(() => {
-      if (window.vscode) window.vscode.postMessage({ type: 'saveSetting', setting: 'fillColor', value: action.color });
-    }, 300);
+  if (editorStateSync.ready && !editorStateSync.applying) {
+    const editorState = getEditorState(store.getState(), editorStateSync.last);
+    const json = JSON.stringify(editorState);
+    if (json !== editorStateSync.json) {
+      editorStateSync.last = editorState;
+      editorStateSync.json = json;
+      clearTimeout(editorStateSync.timer);
+      editorStateSync.timer = setTimeout(() => {
+        if (window.vscode) window.vscode.postMessage({ type: 'saveSetting', setting: 'editorState', value: editorState });
+      }, 150);
+    }
   }
   return result;
 };
@@ -36,12 +41,68 @@ const reducers = combineReducers({
   intl: intlReducer,
   scratchPaint: paintReducer
 });
-const rawStore = createStore(reducers, applyMiddleware(persistFillColor));
+const rawStore = createStore(reducers, applyMiddleware(shareEditorState));
 
-const savedFillColor = window.vetchSettings?.fillColor;
-if (typeof savedFillColor === 'string' && COLOR_PATTERN.test(savedFillColor)) {
-  rawStore.dispatch(changeFillColor(savedFillColor));
-}
+// The snapping and skew addons hook into the select tool when they start, so every editor starts with the
+// select tool and only switches to the shared tool once those addons are set up
+let toolAddonsReady = false;
+let pendingMode = null;
+
+const applySharedEditorState = (editorState) => {
+  if (!editorState) return;
+  if (!toolAddonsReady) {
+    pendingMode = editorState.mode;
+    editorState = { ...editorState, mode: undefined };
+  }
+  editorStateSync.applying = true;
+  try {
+    applyEditorState(rawStore, editorState);
+  } finally {
+    editorStateSync.applying = false;
+  }
+  // Don't send the state we were just given back to the other editors
+  editorStateSync.last = getEditorState(rawStore.getState(), editorState);
+  editorStateSync.json = JSON.stringify(editorStateSync.last);
+};
+
+// Start from the state embedded in the page; the extension sends the latest state once the editor is ready
+applySharedEditorState(window.vetchSettings?.editorState);
+
+// Camera: start where the last active Vetch editor left it (or centered on the artboard), and remember it
+// as the user pans and zooms so the next editor that loads starts in the same place
+let cameraRestored = false;
+let lastSavedCamera = null;
+
+const restoreCamera = (camera) => {
+  if (cameraRestored || !paper.view) return;
+  cameraRestored = true;
+  const isValid = camera && [camera.zoom, camera.x, camera.y].every(Number.isFinite) && camera.zoom > 0;
+  paper.view.zoom = isValid ? camera.zoom : 0.5;
+  paper.view.center = isValid ? new paper.Point(camera.x, camera.y) : CENTER;
+  resizeCrosshair();
+  setWorkspaceBounds();
+  rawStore.dispatch(updateViewBounds(paper.view.matrix));
+};
+
+const saveCamera = () => {
+  if (!window.vscode || !paper.view || !cameraRestored) return;
+  const camera = { zoom: paper.view.zoom, x: paper.view.center.x, y: paper.view.center.y };
+  const json = JSON.stringify(camera);
+  if (json === lastSavedCamera) return;
+  lastSavedCamera = json;
+  window.vscode.postMessage({ type: 'saveSetting', setting: 'camera', value: camera });
+};
+
+// Settings shared by every Vetch editor, sent by the extension when this editor loads and whenever
+// another editor changes them
+const applySettings = (settings) => {
+  window.vetchSettings = { ...window.vetchSettings, ...settings };
+  if (settings.editorState) applySharedEditorState(settings.editorState);
+  editorStateSync.ready = true;
+  if ('camera' in settings) restoreCamera(settings.camera);
+  // Lets the addons pick up shared settings like snapping and the canvas background
+  window.dispatchEvent(new CustomEvent('vetch-settings', { detail: settings }));
+};
 
 import { createAdapter } from './scratch-addons/adapter.js';
 import paintSnapSetup from './scratch-addons/paint-snap/userscript.js';
@@ -54,8 +115,16 @@ import './scratch-addons/color-picker/style.css';
 import './scratch-addons/opacity-slider/style.css';
 
 // Initialize addons
-paintSnapSetup(createAdapter(rawStore, "paintSnap")).catch(console.error);
-paintSkewSetup(createAdapter(rawStore, "paintSkew")).catch(console.error);
+Promise.all([
+  paintSnapSetup(createAdapter(rawStore, "paintSnap")),
+  paintSkewSetup(createAdapter(rawStore, "paintSkew"))
+]).catch(console.error).finally(() => {
+  toolAddonsReady = true;
+  // Switch to the shared tool, unless the user already picked a different one
+  if (pendingMode && rawStore.getState().scratchPaint.mode === 'SELECT') {
+    applySharedEditorState({ mode: pendingMode });
+  }
+});
 disablePasteOffsetSetup(createAdapter(rawStore, "disablePasteOffset")).catch(console.error);
 colorPickerSetup(createAdapter(rawStore, "colorPicker")).catch(console.error);
 opacitySliderSetup(createAdapter(rawStore, "opacitySlider")).catch(console.error);
@@ -71,28 +140,13 @@ function App() {
   const [imageId, setImageId] = useState('0');
   const [rotationCenterX, setRotationCenterX] = useState(undefined);
   const [rotationCenterY, setRotationCenterY] = useState(undefined);
-  const cameraRestoredRef = useRef(false);
-  const cameraSaveTimerRef = useRef(null);
-
-  // Debounced save of camera state to extension
-  const saveCameraState = useCallback(() => {
-    if (!vscode || !paper.view) return;
-    if (cameraSaveTimerRef.current) {
-      clearTimeout(cameraSaveTimerRef.current);
-    }
-    cameraSaveTimerRef.current = setTimeout(() => {
-      const zoom = paper.view.zoom;
-      const center = paper.view.center;
-      vscode.postMessage({ type: 'saveSetting', setting: 'cameraZoom', value: zoom });
-      vscode.postMessage({ type: 'saveSetting', setting: 'cameraX', value: center.x });
-      vscode.postMessage({ type: 'saveSetting', setting: 'cameraY', value: center.y });
-    }, 300);
-  }, []);
 
   useEffect(() => {
     const handleMessage = event => {
       const message = event.data;
-      if (message.type === 'update') {
+      if (message.type === 'settings') {
+        applySettings(message.settings || {});
+      } else if (message.type === 'update') {
         let text = message.text?.trim() ? message.text : emptySvg;
 
         let cx = undefined;
@@ -197,7 +251,7 @@ function App() {
       if (isPanning && (e.button === 1 || e.buttons === 0)) {
         isPanning = false;
         document.body.style.cursor = '';
-        saveCameraState();
+        saveCamera();
       }
     };
 
@@ -219,64 +273,46 @@ function App() {
       window.removeEventListener('mouseup', handleMouseUp, true);
       window.removeEventListener('auxclick', handleAuxClick, true);
     };
-  }, [saveCameraState]);
-
-  // Restore persisted camera state or center the view on first load
-  useEffect(() => {
-    const waitForPaper = () => {
-      if (!paper.view || !paper.project) {
-        setTimeout(waitForPaper, 50);
-        return;
-      }
-
-      // Wait a frame for scratch-paint to finish its own initial layout
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (cameraRestoredRef.current) return;
-          cameraRestoredRef.current = true;
-
-          const settings = window.vetchSettings || {};
-          const hasPersistedCamera =
-            settings.cameraZoom != null &&
-            settings.cameraX != null &&
-            settings.cameraY != null;
-
-          if (hasPersistedCamera) {
-            // Restore persisted camera state
-            paper.view.zoom = settings.cameraZoom;
-            paper.view.center = new paper.Point(settings.cameraX, settings.cameraY);
-          } else {
-            // Center the view on the artboard (480x360, centered at 240,180)
-            paper.view.center = new paper.Point(240, 180);
-          }
-        });
-      });
-    };
-    waitForPaper();
   }, []);
 
-  // Track zoom changes from scratch-paint's own zoom controls (buttons/keyboard)
+  // Keep the camera centered on the same spot when the editor is resized. Paper keeps the top-left
+  // corner fixed instead, which made the view drift as panels opened and the editor finished laying out.
   useEffect(() => {
-    let lastZoom = null;
-    let lastCenterX = null;
-    let lastCenterY = null;
+    if (!paper.view) return;
+    const view = paper.view;
+    const keepCenter = (event) => {
+      view.center = view.center.subtract(event.delta.divide(2 * view.zoom));
+      rawStore.dispatch(updateViewBounds(view.matrix));
+    };
+    view.on('resize', keepCenter);
+    return () => view.off('resize', keepCenter);
+  }, []);
 
-    const interval = setInterval(() => {
-      if (!paper.view) return;
-      const zoom = paper.view.zoom;
-      const cx = paper.view.center.x;
-      const cy = paper.view.center.y;
+  // Save the camera as the user pans and zooms (canvas drags, scroll wheel, zoom buttons)
+  useEffect(() => {
+    const interval = setInterval(saveCamera, 250);
+    // Save right away when this editor is hidden (e.g. switching tabs), before VS Code unloads it
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') saveCamera();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
-      if (zoom !== lastZoom || cx !== lastCenterX || cy !== lastCenterY) {
-        lastZoom = zoom;
-        lastCenterX = cx;
-        lastCenterY = cy;
-        saveCameraState();
-      }
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, [saveCameraState]);
+  // Let the mouse wheel scroll the top toolbars sideways when they don't fit
+  useEffect(() => {
+    const handleWheel = (e) => {
+      const row = e.target.closest && e.target.closest('[class*="paint-editor_editor-container-top_"] > div');
+      if (!row || row.scrollWidth <= row.clientWidth || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      row.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, []);
 
   const handleUpdateImage = (isVector, image, centerX, centerY) => {
     if (vscode && isVector) {

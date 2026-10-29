@@ -1,7 +1,15 @@
 import * as vscode from 'vscode';
 
-// Colors the editor stores for its fill color: hex, rgb() or rgba()
-const COLOR_PATTERN = /^(#([0-9a-f]{3}){1,2}|rgba?\([\d\s.,%]+\))$/i;
+// Settings shared by every Vetch editor and their defaults. `camera` is where the last active editor's
+// view was; `editorState` is its tool, colors and sizes.
+const SHARED_SETTINGS: Record<string, unknown> = {
+    snapOn: true,
+    isDarkMode: false,
+    camera: null,
+    editorState: null
+};
+// Settings that are passed on to the other open editors as soon as they change
+const LIVE_SETTINGS = new Set(['snapOn', 'isDarkMode', 'editorState']);
 
 export function activate(context: vscode.ExtensionContext) {
     // Register our custom editor provider
@@ -17,7 +25,35 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
 
     private static readonly viewType = 'scratchSvgEditor.paint';
 
-    constructor(private readonly context: vscode.ExtensionContext) { }
+    // Webviews of all open Vetch editors
+    private readonly webviews = new Set<vscode.Webview>();
+
+    // Current shared settings. Kept in memory and saved to global state as a single object: saving
+    // separate keys in quick succession (the camera is saved several times a second while panning)
+    // could lose some of the updates.
+    private readonly settings: Record<string, unknown>;
+
+    constructor(private readonly context: vscode.ExtensionContext) {
+        const state = context.globalState;
+        // Settings saved by Vetch 1.0 under separate keys
+        const legacyCamera = [state.get('vetch.cameraZoom'), state.get('vetch.cameraX'), state.get('vetch.cameraY')];
+        const legacy: Record<string, unknown> = {
+            snapOn: state.get('vetch.snapOn', SHARED_SETTINGS.snapOn),
+            isDarkMode: state.get('vetch.isDarkMode', SHARED_SETTINGS.isDarkMode),
+            camera: legacyCamera.every(value => typeof value === 'number') ?
+                { zoom: legacyCamera[0], x: legacyCamera[1], y: legacyCamera[2] } : null
+        };
+        this.settings = { ...SHARED_SETTINGS, ...legacy, ...state.get<Record<string, unknown>>('vetch.settings', {}) };
+    }
+
+    private getSettings(): Record<string, unknown> {
+        return { ...this.settings };
+    }
+
+    private saveSetting(name: string, value: unknown) {
+        this.settings[name] = value;
+        this.context.globalState.update('vetch.settings', this.settings);
+    }
 
     public async resolveCustomTextEditor(
         document: vscode.TextDocument,
@@ -50,18 +86,34 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
             }
         });
 
+        this.webviews.add(webviewPanel.webview);
+
         webviewPanel.onDidDispose(() => {
             changeDocumentSubscription.dispose();
+            this.webviews.delete(webviewPanel.webview);
         });
 
         // Listen for messages coming FROM the React app
         webviewPanel.webview.onDidReceiveMessage(async e => {
             switch (e.type) {
                 case 'ready':
+                    // VS Code reloads a webview whenever its tab is shown again, so always send the
+                    // latest shared settings rather than relying on the ones embedded in the page
+                    webviewPanel.webview.postMessage({ type: 'settings', settings: this.getSettings() });
                     updateWebview();
                     return;
                 case 'saveSetting':
-                    this.context.globalState.update(`vetch.${e.setting}`, e.value);
+                    if (!Object.prototype.hasOwnProperty.call(SHARED_SETTINGS, e.setting)) {
+                        return;
+                    }
+                    this.saveSetting(e.setting, e.value);
+                    if (LIVE_SETTINGS.has(e.setting)) {
+                        for (const webview of this.webviews) {
+                            if (webview !== webviewPanel.webview) {
+                                webview.postMessage({ type: 'settings', settings: { [e.setting]: e.value } });
+                            }
+                        }
+                    }
                     return;
                 case 'edit':
                     isUpdatingFromWebview = true;
@@ -97,8 +149,8 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
     private getHtmlForWebview(webview: vscode.Webview): string {
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'webview', 'dist', 'assets', 'index.js'));
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'webview', 'dist', 'assets', 'index.css'));
-        const savedFillColor = this.context.globalState.get('vetch.fillColor', null);
-        const fillColor = typeof savedFillColor === 'string' && COLOR_PATTERN.test(savedFillColor) ? savedFillColor : null;
+        // Escape "<" so stored values can't close the script tag
+        const settingsJson = JSON.stringify(this.getSettings()).replace(/</g, '\\u003c');
 
         return `
             <!DOCTYPE html>
@@ -112,14 +164,7 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
                     body, html { margin: 0; padding: 0; height: 100vh; overflow: hidden; background-color: #1e1e1e; }
                 </style>
                 <script>
-                    window.vetchSettings = {
-                        snapOn: ${this.context.globalState.get('vetch.snapOn', true)},
-                        isDarkMode: ${this.context.globalState.get('vetch.isDarkMode', false)},
-                        cameraZoom: ${JSON.stringify(this.context.globalState.get('vetch.cameraZoom', null))},
-                        cameraX: ${JSON.stringify(this.context.globalState.get('vetch.cameraX', null))},
-                        cameraY: ${JSON.stringify(this.context.globalState.get('vetch.cameraY', null))},
-                        fillColor: ${JSON.stringify(fillColor)}
-                    };
+                    window.vetchSettings = ${settingsJson};
                 </script>
             </head>
             <body>

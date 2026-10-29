@@ -162,8 +162,8 @@ export const createAdapter = (store, addonId = "default") => {
             },
             settings: new class extends EventTargetMock {
                 get(key) {
-                    // Default settings for paint-snap 
-                    if (key === 'enable-default') return true;
+                    // Default settings for paint-snap
+                    if (key === 'enable-default') return window.vetchSettings?.snapOn ?? true;
                     if (key === 'guide-color') return '#c40f0fff';
                     if (key === 'threshold') return 5;
 
