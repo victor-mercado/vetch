@@ -1,8 +1,9 @@
 /**
  * Point editing helpers for the Vetch SVG editor.
- * Provides midpoint insertion for the point selection (reshape) tool.
+ * Provides midpoint insertion and line caps for the point selection (reshape) tool.
  */
-import { getSelectedSegments } from './selection';
+import paper from '@scratch/paper';
+import { getSelectedLeafItems, getSelectedSegments } from './selection';
 
 /**
  * Get the curve that directly connects two points of the same path, or null if they aren't neighbors.
@@ -60,4 +61,49 @@ export function insertMidpoint(setSelectedItems, onUpdateImage) {
     setSelectedItems();
     onUpdateImage();
     if (document.activeElement) document.activeElement.blur();
+}
+
+/**
+ * Get the selected paths that have ends, and so line caps (compound paths hold the style for their parts).
+ */
+function getSelectedOpenPaths() {
+    const paths = [];
+    for (const item of getSelectedLeafItems()) {
+        if (!(item instanceof paper.Path) || item.closed) continue;
+        const styled = item.parent instanceof paper.CompoundPath ? item.parent : item;
+        if (!paths.includes(styled)) paths.push(styled);
+    }
+    return paths;
+}
+
+/**
+ * Check if a line cap can be applied (an open path is selected).
+ */
+export function canSetLineCap() {
+    return getSelectedOpenPaths().length > 0;
+}
+
+/**
+ * Get the line cap shared by the selected open paths: 'butt', 'round', 'square', or null if they differ.
+ */
+export function getSelectedLineCap() {
+    const paths = getSelectedOpenPaths();
+    if (paths.length === 0) return null;
+    const cap = paths[0].strokeCap;
+    return paths.every(path => path.strokeCap === cap) ? cap : null;
+}
+
+/**
+ * Apply a line cap ('butt', 'round' or 'square') to the selected open paths.
+ */
+export function setLineCap(cap, onUpdateImage) {
+    let changed = false;
+    for (const path of getSelectedOpenPaths()) {
+        if (path.strokeCap !== cap) {
+            path.strokeCap = cap;
+            changed = true;
+        }
+    }
+    if (changed) onUpdateImage();
+    return changed;
 }

@@ -109,6 +109,49 @@ div[class*="font-dropdown_mod-menu-item_"]>span {
   background-color: rgba(35, 186, 0, 0.35) !important;
 }
 
+/* Keyboard shortcut badge in the bottom right corner of tool buttons */
+[class*="tool-select-base_mod-tool-select_"],
+[class*="labeled-icon-button_mod-edit-field_"] {
+  position: relative;
+}
+
+.vetch-shortcut {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  min-width: 0.55rem;
+  padding: 0 0.15rem;
+  border: 1px solid rgba(220, 0, 255, 0.45);
+  border-radius: 0.2rem;
+  background-color: #252526;
+  color: #cccccc;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 0.5rem;
+  font-weight: bold;
+  line-height: 0.75rem;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Tool shortcuts only show while hovering the tool (the P badge on Curved/Pointed always shows) */
+[class*="tool-select-base_mod-tool-select_"] > .vetch-shortcut {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+[class*="tool-select-base_mod-tool-select_"]:hover > .vetch-shortcut {
+  opacity: 1;
+}
+
+/* On labeled buttons, sit at the bottom right of the icon so the label stays readable */
+[class*="labeled-icon-button_mod-edit-field_"] > .vetch-shortcut {
+  top: 1.2rem;
+  bottom: auto;
+  left: calc(50% + 0.4rem);
+  right: auto;
+}
+
 /* Prevent text selection in color picker popup (sliders, labels, readouts) */
 div[class*="color-picker_color-picker_"],
 div[class*="color-picker_row-header"],

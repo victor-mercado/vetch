@@ -41,6 +41,8 @@ const extensionConfig = {
     ]
   },
   devtool: 'nosources-source-map',
+  // SVGO's config file loader imports a computed path; Vetch passes its config directly and never uses it
+  ignoreWarnings: [{ module: /svgo/, message: /Critical dependency/ }],
   infrastructureLogging: {
     level: "log", // enables logging required for problem matchers
   },

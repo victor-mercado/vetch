@@ -39,6 +39,13 @@ const paintEditorComponentPath = path.join(basePath, 'components/paint-editor/pa
 const keyboardShortcutsHocPath = path.join(basePath, 'hocs/keyboard-shortcuts-hoc.jsx');
 const strokeWidthContainerPath = path.join(basePath, 'containers/stroke-width-indicator.jsx');
 const strokeWidthComponentPath = path.join(basePath, 'components/stroke-width-indicator.jsx');
+const strokeWidthReducerPath = path.join(basePath, 'reducers/stroke-width.js');
+const paintEditorCssPath = path.join(basePath, 'components/paint-editor/paint-editor.css');
+const paintEditorIconsDir = path.join(basePath, 'components/paint-editor/icons');
+const modeToolsContainerPath = path.join(basePath, 'containers/mode-tools.jsx');
+const modeToolsIconsDir = path.join(basePath, 'components/mode-tools/icons');
+const toolSelectBasePath = path.join(basePath, 'components/tool-select-base/tool-select-base.jsx');
+const labeledIconButtonPath = path.join(basePath, 'components/labeled-icon-button/labeled-icon-button.jsx');
 const vetchIconsDir = path.resolve(__dirname, 'src/icons');
 
 // Vetch theme colors
@@ -213,11 +220,45 @@ import {divideCurveAtMidpoint} from '../point-tools';`
     ]);
 
     // ── paint-editor.jsx ──
-    // Slow down zoom out from immediate 0.05 step
+    // Slow down zoom out from immediate 0.05 step, pass the Optimize and Save SVG handler to the component,
+    // and make Rasterize to Bitmap turn shapes into a high resolution image instead of entering bitmap mode
     patchFile(paintEditorPath, 'paint-editor.jsx', [
         [
             'zoomOnSelection(-PaintEditor.ZOOM_INCREMENT);',
             '// pSVG zoom slower\n        const centerPoint = paper.project.view.center;\n        zoomOnSelection(Math.max(-paper.view.zoom / 2, -PaintEditor.ZOOM_INCREMENT));'
+        ],
+        [
+            `import EyeDropperTool from '../helper/tools/eye-dropper';`,
+            `import EyeDropperTool from '../helper/tools/eye-dropper';
+import {rasterizeItems} from '../helper/rasterize';`
+        ],
+        [
+            `            'handleZoomReset'
+        ]);`,
+            `            'handleZoomReset',
+            'handleRasterize'
+        ]);`
+        ],
+        [
+            `    handleSetSelectedItems () {`,
+            `    handleRasterize () {
+        // pSVG: Rasterize the selection (or everything) into an image, staying in vector mode
+        rasterizeItems(this.handleSetSelectedItems, this.props.onUpdateImage);
+    }
+    handleSetSelectedItems () {`
+        ],
+        [
+            `                onUndo={this.props.onUndo}
+                onUpdateImage={this.props.onUpdateImage}`,
+            `                onOptimizeSvg={this.props.onOptimizeSvg}
+                onRasterize={this.handleRasterize}
+                onUndo={this.props.onUndo}
+                onUpdateImage={this.props.onUpdateImage}`
+        ],
+        [
+            `    onKeyPress: PropTypes.func.isRequired,`,
+            `    onKeyPress: PropTypes.func.isRequired,
+    onOptimizeSvg: PropTypes.func,`
         ]
     ]);
 
@@ -270,8 +311,69 @@ import {divideCurveAtMidpoint} from '../point-tools';`
     ]);
 
     // ── paint-editor.jsx (component) ──
-    // The hidden textarea used for text editing shouldn't get OS autocorrect/autocapitalize (macOS)
+    // The hidden textarea used for text editing shouldn't get OS autocorrect/autocapitalize (macOS).
+    // Rename "Convert to Bitmap" and add an "Optimize and Save SVG" button to its left.
     patchFile(paintEditorComponentPath, 'paint-editor component', [
+        [
+            `import bitmapIcon from './icons/bitmap.svg';`,
+            `import bitmapIcon from './icons/bitmap.svg';
+import optimizeIcon from './icons/optimize.svg';`
+        ],
+        [
+            `    bitmap: {
+        defaultMessage: 'Convert to Bitmap',`,
+            `    optimize: {
+        defaultMessage: 'Optimize and Save SVG',
+        description: 'Label for button that removes unneeded data from the SVG file and saves it',
+        id: 'paint.paintEditor.optimize'
+    },
+    bitmap: {
+        defaultMessage: 'Rasterize to Bitmap',`
+        ],
+        [
+            `                    <div className={styles.canvasControls}>
+                        {isVector(props.format) ?`,
+            `                    <div className={styles.canvasControls}>
+                        {/* pSVG: Optimize and Save SVG, then the bitmap/vector conversion button */}
+                        <div className={styles.canvasControlsStart}>
+                        {isVector(props.format) && props.onOptimizeSvg ?
+                            <Button
+                                className={styles.bitmapButton}
+                                onClick={props.onOptimizeSvg}
+                            >
+                                <img
+                                    className={styles.bitmapButtonIcon}
+                                    draggable={false}
+                                    src={optimizeIcon}
+                                />
+                                <span className={styles.buttonText}>
+                                    {intl.formatMessage(messages.optimize)}
+                                </span>
+                            </Button> : null
+                        }
+                        {isVector(props.format) ?`
+        ],
+        [
+            `                                        {intl.formatMessage(messages.vector)}
+                                    </span>
+                                </Button> : null
+                        }`,
+            `                                        {intl.formatMessage(messages.vector)}
+                                    </span>
+                                </Button> : null
+                        }
+                        </div>`
+        ],
+        [
+            `                                onClick={props.onSwitchToBitmap}`,
+            `                                onClick={props.onRasterize}`
+        ],
+        [
+            `    onSwitchToBitmap: PropTypes.func.isRequired,`,
+            `    onOptimizeSvg: PropTypes.func,
+    onRasterize: PropTypes.func,
+    onSwitchToBitmap: PropTypes.func.isRequired,`
+        ],
         [
             `                            ref={props.setTextArea}
                             spellCheck={false}`,
@@ -339,6 +441,329 @@ import {divideCurveAtMidpoint} from '../point-tools';`
         [
             `            value={props.strokeWidth ? props.strokeWidth : 0}`,
             `            value={props.strokeWidth ? Math.round(props.strokeWidth * 100) / 100 : 0}`
+        ],
+        // No upper limit on outline width
+        [/\n\s*max=\{MAX_STROKE_WIDTH\}/, ''],
+        [/import \{MAX_STROKE_WIDTH\} from '\.\.\/reducers\/stroke-width';\n/, '']
+    ]);
+    // Outline width has no upper limit (brush and eraser sizes keep theirs)
+    patchFile(strokeWidthReducerPath, 'stroke-width.js', [
+        [
+            `        return Math.min(MAX_STROKE_WIDTH, Math.max(0, action.strokeWidth));`,
+            `        return Math.max(0, action.strokeWidth); // pSVG: no upper limit`
+        ]
+    ]);
+
+    // ── keyboard-shortcuts-hoc.jsx ──
+    // Single-key tool shortcuts, only without modifier keys (Cmd/Ctrl combinations are handled above them)
+    patchFile(keyboardShortcutsHocPath, 'keyboard-shortcuts-hoc.jsx (tool shortcuts)', [
+        [
+            `const KeyboardShortcutsHOC = function (WrappedComponent) {`,
+            `// pSVG: Tool for each shortcut key in vector and bitmap mode (the point selection tool is vector only)
+const TOOL_SHORTCUTS = {
+    v: [Modes.SELECT, Modes.BIT_SELECT],
+    a: [Modes.RESHAPE, null],
+    b: [Modes.BRUSH, Modes.BIT_BRUSH],
+    e: [Modes.ERASER, Modes.BIT_ERASER],
+    f: [Modes.FILL, Modes.BIT_FILL],
+    t: [Modes.TEXT, Modes.BIT_TEXT],
+    l: [Modes.LINE, Modes.BIT_LINE],
+    c: [Modes.OVAL, Modes.BIT_OVAL],
+    s: [Modes.RECT, Modes.BIT_RECT]
+};
+
+const KeyboardShortcutsHOC = function (WrappedComponent) {`
+        ],
+        [
+            `                } else if (event.key === 'a') {
+                    this.changeToASelectMode();
+                    event.preventDefault();
+                    this.selectAll();
+                }
+            }
+        }`,
+            `                } else if (event.key === 'a') {
+                    this.changeToASelectMode();
+                    event.preventDefault();
+                    this.selectAll();
+                }
+            } else if (!event.shiftKey && !event.altKey && event.key && TOOL_SHORTCUTS[event.key.toLowerCase()]) {
+                // pSVG: Switch tools with a single key
+                const mode = TOOL_SHORTCUTS[event.key.toLowerCase()][isBitmap(this.props.format) ? 1 : 0];
+                if (mode && mode !== this.props.mode) this.props.changeMode(mode);
+            }
+        }`
+        ]
+    ]);
+
+    // ── tool-select-base.jsx ──
+    // Show each tool's shortcut key in the corner of its button and in its tooltip
+    patchFile(toolSelectBasePath, 'tool-select-base.jsx', [
+        [
+            `const ToolSelectComponent = props => {
+    const intl = useIntl();`,
+            `// pSVG: Shortcut key for each tool (see keyboard-shortcuts-hoc.jsx), by the tool's label
+const TOOL_SHORTCUTS = {
+    'paint.selectMode.select': 'V',
+    'paint.reshapeMode.reshape': 'A',
+    'paint.brushMode.brush': 'B',
+    'paint.eraserMode.eraser': 'E',
+    'paint.fillMode.fill': 'F',
+    'paint.textMode.text': 'T',
+    'paint.lineMode.line': 'L',
+    'paint.ovalMode.oval': 'C',
+    'paint.rectMode.rect': 'S'
+};
+
+const ToolSelectComponent = props => {
+    const intl = useIntl();
+    const shortcut = TOOL_SHORTCUTS[props.imgDescriptor.id];`
+        ],
+        [
+            `            title={intl.formatMessage(props.imgDescriptor)}`,
+            `            title={intl.formatMessage(props.imgDescriptor) + (shortcut ? ' (' + shortcut + ')' : '')}`
+        ],
+        [
+            `                src={props.imgSrc}
+            />
+        </Button>`,
+            `                src={props.imgSrc}
+            />
+            {shortcut ? <span className="vetch-shortcut">{shortcut}</span> : null}
+        </Button>`
+        ]
+    ]);
+
+    // ── labeled-icon-button.jsx ──
+    // Optional shortcut key shown in the corner of the button (used for P on Curved/Pointed)
+    patchFile(labeledIconButtonPath, 'labeled-icon-button.jsx', [
+        [
+            `    onClick,
+    title,
+    ...props
+}) => (`,
+            `    onClick,
+    shortcut,
+    title,
+    ...props
+}) => (`
+        ],
+        [
+            `        {!hideLabel && <span className={styles.editFieldTitle}>{title}</span>}`,
+            `        {!hideLabel && <span className={styles.editFieldTitle}>{title}</span>}
+        {shortcut ? <span className="vetch-shortcut">{shortcut}</span> : null}`
+        ],
+        [
+            `    onClick: PropTypes.func.isRequired,
+    title: PropTypes.string.isRequired`,
+            `    onClick: PropTypes.func.isRequired,
+    shortcut: PropTypes.string,
+    title: PropTypes.string.isRequired`
+        ]
+    ]);
+
+    // ── mode-tools.jsx (container) ──
+    // In point selection mode: P toggles the selected points between curved and pointed, and line caps
+    patchFile(modeToolsContainerPath, 'mode-tools container', [
+        [
+            `import Modes from '../lib/modes';`,
+            `import Modes from '../lib/modes';
+import {canSetLineCap, getSelectedLineCap, setLineCap} from '../helper/point-tools';`
+        ],
+        [
+            `            'handlePasteFromClipboard',
+            'handlePointPoints'
+        ]);
+    }`,
+            `            'handlePasteFromClipboard',
+            'handlePointPoints',
+            'handleKeyDown',
+            'handleSetLineCap'
+        ]);
+    }
+    componentDidMount () {
+        document.addEventListener('keydown', this.handleKeyDown);
+    }
+    componentWillUnmount () {
+        document.removeEventListener('keydown', this.handleKeyDown);
+    }
+    handleKeyDown (event) {
+        // pSVG: P makes the selected points curved, or pointed if they're all curved already
+        if (this.props.mode !== Modes.RESHAPE || !event.key || event.key.toLowerCase() !== 'p') return;
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+        if (this.hasSelectedUncurvedPoints()) {
+            this.handleCurvePoints();
+        } else {
+            this.handlePointPoints();
+        }
+    }
+    handleSetLineCap (cap) {
+        if (setLineCap(cap, this.props.onUpdateImage)) {
+            this.props.setSelectedItems(this.props.format);
+        }
+    }`
+        ],
+        [
+            `                hasSelectedUnpointedPoints={this.hasSelectedUnpointedPoints()}`,
+            `                hasSelectedUnpointedPoints={this.hasSelectedUnpointedPoints()}
+                canSetLineCap={this.props.mode === Modes.RESHAPE && canSetLineCap()}
+                lineCap={this.props.mode === Modes.RESHAPE ? getSelectedLineCap() : null}
+                onSetLineCap={this.handleSetLineCap}`
+        ]
+    ]);
+
+    // ── mode-tools.jsx (component) ──
+    // Point selection mode: show P on the button it will press, and add line cap buttons
+    patchFile(modeToolsPath, 'mode-tools component (point selection)', [
+        [
+            `import straightPointIcon from './icons/straight-point.svg';`,
+            `import straightPointIcon from './icons/straight-point.svg';
+import capButtIcon from './icons/cap-butt.svg';
+import capRoundIcon from './icons/cap-round.svg';
+import capSquareIcon from './icons/cap-square.svg';`
+        ],
+        [
+            `        pointed: {
+            defaultMessage: 'Pointed',
+            description: 'Label for the button that converts selected points to sharp points',
+            id: 'paint.modeTools.pointed'
+        },`,
+            `        pointed: {
+            defaultMessage: 'Pointed',
+            description: 'Label for the button that converts selected points to sharp points',
+            id: 'paint.modeTools.pointed'
+        },
+        capButt: {
+            defaultMessage: 'Butt',
+            description: 'Label for the button that ends lines flat at their end points',
+            id: 'paint.modeTools.capButt'
+        },
+        capRound: {
+            defaultMessage: 'Round',
+            description: 'Label for the button that gives lines rounded ends',
+            id: 'paint.modeTools.capRound'
+        },
+        capSquare: {
+            defaultMessage: 'Square',
+            description: 'Label for the button that ends lines with a square past their end points',
+            id: 'paint.modeTools.capSquare'
+        },`
+        ],
+        [
+            `    case Modes.RESHAPE:
+        return (
+            <div className={classNames(props.className, styles.modeTools)}>
+                <InputGroup className={classNames(styles.modDashedBorder, styles.modLabeledIconHeight)}>
+                    <LabeledIconButton
+                        disabled={!props.hasSelectedUncurvedPoints}
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={curvedPointIcon}
+                        title={intl.formatMessage(messages.curved)}
+                        onClick={props.onCurvePoints}
+                    />
+                    <LabeledIconButton
+                        disabled={!props.hasSelectedUnpointedPoints}
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={straightPointIcon}
+                        title={intl.formatMessage(messages.pointed)}
+                        onClick={props.onPointPoints}
+                    />
+                </InputGroup>`,
+            `    case Modes.RESHAPE: {
+        // pSVG: P curves the selected points, or points them once they're all curved
+        const pCurves = props.hasSelectedUncurvedPoints || !props.hasSelectedUnpointedPoints;
+        return (
+            <div className={classNames(props.className, styles.modeTools)}>
+                <InputGroup className={classNames(styles.modDashedBorder, styles.modLabeledIconHeight)}>
+                    <LabeledIconButton
+                        disabled={!props.hasSelectedUncurvedPoints}
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={curvedPointIcon}
+                        shortcut={pCurves ? 'P' : null}
+                        title={intl.formatMessage(messages.curved)}
+                        onClick={props.onCurvePoints}
+                    />
+                    <LabeledIconButton
+                        disabled={!props.hasSelectedUnpointedPoints}
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={straightPointIcon}
+                        shortcut={pCurves ? null : 'P'}
+                        title={intl.formatMessage(messages.pointed)}
+                        onClick={props.onPointPoints}
+                    />
+                </InputGroup>
+                <InputGroup className={classNames(styles.modDashedBorder, styles.modLabeledIconHeight)}>
+                    <LabeledIconButton
+                        disabled={!props.canSetLineCap}
+                        highlighted={props.lineCap === 'butt'}
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={capButtIcon}
+                        title={intl.formatMessage(messages.capButt)}
+                        onClick={() => props.onSetLineCap('butt')}
+                    />
+                    <LabeledIconButton
+                        disabled={!props.canSetLineCap}
+                        highlighted={props.lineCap === 'round'}
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={capRoundIcon}
+                        title={intl.formatMessage(messages.capRound)}
+                        onClick={() => props.onSetLineCap('round')}
+                    />
+                    <LabeledIconButton
+                        disabled={!props.canSetLineCap}
+                        highlighted={props.lineCap === 'square'}
+                        hideLabel={hideLabel(intl.locale)}
+                        imgSrc={capSquareIcon}
+                        title={intl.formatMessage(messages.capSquare)}
+                        onClick={() => props.onSetLineCap('square')}
+                    />
+                </InputGroup>`
+        ],
+        [
+            `                        title={intl.formatMessage(messages.delete)}
+                        onClick={props.onDelete}
+                    />
+                </InputGroup>
+            </div>
+        );
+    case Modes.BIT_SELECT:`,
+            `                        title={intl.formatMessage(messages.delete)}
+                        onClick={props.onDelete}
+                    />
+                </InputGroup>
+            </div>
+        );
+    }
+    case Modes.BIT_SELECT:`
+        ],
+        [
+            `    hasSelectedUnpointedPoints: PropTypes.bool,`,
+            `    hasSelectedUnpointedPoints: PropTypes.bool,
+    canSetLineCap: PropTypes.bool,
+    lineCap: PropTypes.string,
+    onSetLineCap: PropTypes.func,`
+        ],
+        // No upper limit on brush and eraser sizes
+        [/\n\s*max=\{MAX_STROKE_WIDTH\}/g, ''],
+        [/import \{MAX_STROKE_WIDTH\} from '\.\.\/\.\.\/reducers\/stroke-width';\n/, '']
+    ]);
+
+    // ── paint-editor.css ──
+    // Row for the buttons at the bottom left (Optimize and Save SVG, Rasterize to Bitmap)
+    patchFile(paintEditorCssPath, 'paint-editor.css', [
+        [
+            `.canvas-controls {
+    display: flex;
+    height: 36px;`,
+            `.canvas-controls-start {
+    display: flex;
+    gap: calc(2 * $grid-unit);
+}
+
+.canvas-controls {
+    display: flex;
+    height: 36px;`
         ]
     ]);
 
@@ -685,16 +1110,21 @@ const ColorButtonComponent = props => (`
         ]
     ]);
 
-    // ── Copy boolean tool icons into scratch-paint icons dir ──
-    const iconsToCopy = ['expand-stroke.svg', 'union.svg', 'subtract.svg', 'midpoint.svg'];
-    for (const icon of iconsToCopy) {
-        const src = path.join(vetchIconsDir, icon);
-        const dst = path.join(fixedToolsIconsDir, icon);
-        if (fs.existsSync(src)) {
-            fs.copyFileSync(src, dst);
+    // ── Copy Vetch icons into scratch-paint icons dirs ──
+    const iconsToCopy = {
+        [fixedToolsIconsDir]: ['expand-stroke.svg', 'union.svg', 'subtract.svg', 'midpoint.svg'],
+        [modeToolsIconsDir]: ['cap-butt.svg', 'cap-round.svg', 'cap-square.svg'],
+        [paintEditorIconsDir]: ['optimize.svg']
+    };
+    for (const [dir, icons] of Object.entries(iconsToCopy)) {
+        for (const icon of icons) {
+            const src = path.join(vetchIconsDir, icon);
+            if (fs.existsSync(src)) {
+                fs.copyFileSync(src, path.join(dir, icon));
+            }
         }
     }
-    console.log('[patch.js] Copied boolean tool icons');
+    console.log('[patch.js] Copied Vetch icons');
 
     // ── Copy boolean-tools.js helper into scratch-paint ──
     const boolSrc = path.resolve(__dirname, 'src/boolean-tools.js');
@@ -711,6 +1141,13 @@ const ColorButtonComponent = props => (`
         fs.copyFileSync(pointToolsSrc, pointToolsDst);
     }
     console.log('[patch.js] Copied point-tools.js');
+
+    // ── Copy rasterize.js helper (Rasterize to Bitmap) into scratch-paint ──
+    const rasterizeSrc = path.resolve(__dirname, 'src/rasterize.js');
+    if (fs.existsSync(rasterizeSrc)) {
+        fs.copyFileSync(rasterizeSrc, path.join(basePath, 'helper/rasterize.js'));
+    }
+    console.log('[patch.js] Copied rasterize.js');
 
     // ── fixed-tools.jsx (container) ──
     // Add handlers for Expand Stroke, Union, Subtract and Midpoint

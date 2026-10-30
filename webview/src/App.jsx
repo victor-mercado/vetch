@@ -337,6 +337,11 @@ function App() {
     }
   };
 
+  // The extension optimizes the SVG file and saves it
+  const handleOptimizeSvg = () => {
+    if (vscode) vscode.postMessage({ type: 'optimize' });
+  };
+
   return (
     <Provider store={rawStore}>
       <div style={{ width: 'calc(100vw - 25px)', height: 'calc(100vh - 25px)' }}>
@@ -346,6 +351,7 @@ function App() {
           imageId={imageId}
           rotationCenterX={rotationCenterX}
           rotationCenterY={rotationCenterY}
+          onOptimizeSvg={vscode ? handleOptimizeSvg : undefined}
           onUpdateImage={handleUpdateImage}
         />
       </div>

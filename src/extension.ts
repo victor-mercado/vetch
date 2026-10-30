@@ -1,4 +1,8 @@
 import * as vscode from 'vscode';
+import type { Config } from 'svgo' with { 'resolution-mode': 'import' };
+
+// SVGO is an ES module that also ships a CommonJS build, which require() loads
+const { optimize } = require('svgo') as typeof import('svgo', { with: { 'resolution-mode': 'import' } });
 
 // Settings shared by every Vetch editor and their defaults. `camera` is where the last active editor's
 // view was; `editorState` is its tool, colors and sizes.
@@ -10,6 +14,48 @@ const SHARED_SETTINGS: Record<string, unknown> = {
 };
 // Settings that are passed on to the other open editors as soon as they change
 const LIVE_SETTINGS = new Set(['snapOn', 'isDarkMode', 'editorState']);
+
+// Vetch keeps the image's origin (its rotation center in Scratch) in a comment after </svg>
+const ROTATION_CENTER = /<!--rotationCenter:-?[\d.]+:-?[\d.]+-->/;
+
+// "Optimize and Save SVG": SVGO's default optimizations, which don't change how the image looks, plus
+// removing the extra data the editor writes on every export
+const SVGO_CONFIG: Config = {
+    multipass: true,
+    plugins: [
+        // Also remove the editor's data-paper-data attributes
+        { name: 'preset-default', params: { overrides: { removeUnknownsAndDefaults: { keepDataAttrs: false } } } },
+        {
+            // mix-blend-mode: normal is the default, but the editor writes it on its layer group
+            name: 'removeNormalBlendMode',
+            fn: () => ({
+                element: {
+                    enter: node => {
+                        if (!node.attributes.style) {
+                            return;
+                        }
+                        const declarations = node.attributes.style.split(';').map(declaration => declaration.trim())
+                            .filter(declaration => declaration && !/^mix-blend-mode\s*:\s*normal$/i.test(declaration));
+                        if (declarations.length > 0) {
+                            node.attributes.style = declarations.join(';');
+                        } else {
+                            delete node.attributes.style;
+                        }
+                    }
+                }
+            })
+        }
+    ]
+};
+
+function optimizeSvg(svg: string): string {
+    const rotationCenter = svg.match(ROTATION_CENTER)?.[0] ?? '';
+    return optimize(svg.replace(ROTATION_CENTER, '').trim(), SVGO_CONFIG).data + rotationCenter;
+}
+
+function formatSize(text: string): string {
+    return `${(Buffer.byteLength(text, 'utf8') / 1024).toFixed(1)} KB`;
+}
 
 export function activate(context: vscode.ExtensionContext) {
     // Register our custom editor provider
@@ -78,9 +124,18 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
 
         let isUpdatingFromWebview = false;
 
+        // Change the document one request at a time, so an optimization never works on text that an
+        // edit is still replacing
+        let documentQueue: Promise<unknown> = Promise.resolve();
+        const queueDocumentChange = (change: () => Promise<unknown>) => {
+            documentQueue = documentQueue.then(change, change);
+            return documentQueue;
+        };
+
         // Listen for changes to the file (like undo/redo)
         const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
-            if (e.document.uri.toString() === document.uri.toString()) {
+            // Saving fires a change with no content changes (only the dirty state changed); nothing to reload
+            if (e.document.uri.toString() === document.uri.toString() && e.contentChanges.length > 0) {
                 if (isUpdatingFromWebview) return;
                 updateWebview();
             }
@@ -116,9 +171,35 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
                     }
                     return;
                 case 'edit':
-                    isUpdatingFromWebview = true;
-                    await this.updateTextDocument(document, e.newSvgData);
-                    isUpdatingFromWebview = false;
+                    await queueDocumentChange(async () => {
+                        isUpdatingFromWebview = true;
+                        try {
+                            await this.updateTextDocument(document, e.newSvgData);
+                        } finally {
+                            isUpdatingFromWebview = false;
+                        }
+                    });
+                    return;
+                case 'optimize':
+                    await queueDocumentChange(async () => {
+                        const text = document.getText();
+                        let optimized: string;
+                        try {
+                            optimized = optimizeSvg(text);
+                        } catch (err) {
+                            vscode.window.showErrorMessage(`Vetch couldn't optimize this SVG: ${err instanceof Error ? err.message : err}`);
+                            return;
+                        }
+                        // The editor already shows this image, so don't send it back to be reloaded
+                        isUpdatingFromWebview = true;
+                        try {
+                            await this.updateTextDocument(document, optimized);
+                        } finally {
+                            isUpdatingFromWebview = false;
+                        }
+                        await document.save();
+                        vscode.window.setStatusBarMessage(`Vetch: optimized SVG from ${formatSize(text)} to ${formatSize(optimized)}`, 5000);
+                    });
                     return;
             }
         });
