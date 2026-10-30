@@ -6,6 +6,8 @@
 
 **Vetch** is an extension for Visual Studio Code that allows you to easily open, view, and edit `.svg` files without interrupting your workflow.
 
+Install it on [Open VSX Registry](https://open-vsx.org/extension/MarbleStack/vetch) or [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=MarbleStack.vetch).
+
 ## Features
 
 * **Fully Visual SVG Editing:** No need to manually edit tags; just draw, drag, and drop like a normal human being.
