@@ -10,7 +10,7 @@
 
 * **Fully Visual SVG Editing:** No need to manually edit tags; just draw, drag, and drop like a normal human being.
 * **Familiar Interface:** Utilizes the intuitive and simple Scratch 3.0 vector paint editor as a base with more powerful features listed below.
-* **Geometry Tools:** Includes the essential tools of Select, Reshape, Brush, Erase, Fill, Text, Line, Ellipse, and Rectangle.
+* **Geometry Tools:** Includes the essential tools of Select, Reshape, Brush, Erase, Fill, Text, Line, Ellipse, Rectangle, and Squircle.
 * **Transformation Tools:** Includes the essential tools to move, scale, rotate, flip, center, and layer.
 * **Editor Tools:** Includes the essential tools to modify colors, gradients, copy/paste, undo/redo, group/ungroup.
 
@@ -23,10 +23,19 @@
 * **Snapping:** Switch between freehand mode and snapping mode to easily align shapes.
 * **Copy/Pasting Between Editors:** Copy and paste between open Vetch instances to easily transfer graphics.
 * **Transfer between Vetch and Scratch:** Transformation offsets from the origin and preserved between Vetch and Scratch.
+* **Quick Transforms:** Press G, then X or Y, then type a distance to move the selection, or press R and type an angle to rotate it. Works on shapes and on selected points.
+* **Keyboard Shortcuts:** Switch tools with V, A, B, E, F, T, L, C, and S, and press P to toggle the selected points between curved and pointed. Hover a tool to see its key.
+* **Shared Settings:** Your tool, colors, sizes, and view carry over between open Vetch editors.
 
 
 * **Boolean Operations:** Use the union and difference tools to combine, subtract, and intersect shapes.
 * **Expand Stroke:** Use the expand stroke tool to solidify outlines and edit them as geometric shapes.
+* **Squircle Tool:** Draw rectangles with rounded corners, then change the corner radius of any shape's corners (or just the corners at the selected points) from the toolbar.
+* **Midpoint Tool:** Add a point exactly halfway between two selected points, or Shift-click an outline to add a centered point.
+* **Line Caps:** Give lines butt, round, or square ends. Expand Stroke keeps the cap style.
+* **Optimize and Save SVG:** Shrink the file by removing unneeded data and save it in one click.
+* **Rasterize to Bitmap:** Turn shapes into a flat image inside the SVG.
+* **Installed Fonts:** The text tool uses fonts installed on your computer, each with a standard fallback so the text still shows up on computers without that font.
 
 ![Screenshot of Vetch editor.](screenshot.png)
 

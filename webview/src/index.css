@@ -29,6 +29,24 @@ html {
   padding: 0;
 }
 
+/* The editor's interface can't be selected or dragged like a web page. Only text fields (and the text being
+   typed with the text tool) can be selected. */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+img,
+svg {
+  -webkit-user-drag: none;
+}
+
 /* --- pSVG UI/UX Dark Theme Overrides & Hidden Elements --- */
 
 /* Background of the overall editor area (VS Code default dark gray) */
@@ -162,4 +180,43 @@ div[class*="slider_container"],
 .sa-opacity-handle {
   user-select: none !important;
   -webkit-user-select: none !important;
+}
+
+/* Move/rotate amount being typed for the G and R shortcuts, at the bottom of the canvas */
+.vetch-transform-hud {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid rgba(220, 0, 255, 0.6);
+  border-radius: 0.4rem;
+  background-color: #252526;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  color: #cccccc;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+
+.vetch-transform-label {
+  font-weight: bold;
+  color: #dc00ff;
+}
+
+.vetch-transform-value {
+  min-width: 1ch;
+  padding: 0 0.3rem;
+  border-radius: 0.2rem;
+  background-color: #3c3c3c;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.vetch-transform-hint {
+  margin-left: 0.5rem;
+  color: #8a8a8a;
 }

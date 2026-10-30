@@ -1,6 +1,6 @@
 /**
  * Editor state that is the same in every open Vetch editor: the selected tool, fill and outline colors,
- * outline width, brush and eraser sizes, and font. Each editor reports changes to the extension, which
+ * outline width, brush and eraser sizes, squircle corner radius, and font. Each editor reports changes to the extension, which
  * remembers them and passes them on to the other open editors.
  */
 import { changeMode } from 'scratch-paint/src/reducers/modes.js';
@@ -12,6 +12,7 @@ import { changeBrushSize as changeEraserSize } from 'scratch-paint/src/reducers/
 import { changeBitBrushSize } from 'scratch-paint/src/reducers/bit-brush-size.js';
 import { changeBitEraserSize } from 'scratch-paint/src/reducers/bit-eraser-size.js';
 import { changeFont } from 'scratch-paint/src/reducers/font.js';
+import { changeCornerRadius } from 'scratch-paint/src/reducers/corner-radius.js';
 import { setShapesFilled } from 'scratch-paint/src/reducers/fill-bitmap-shapes.js';
 import { BitmapModes } from 'scratch-paint/src/lib/modes.js';
 import { isBitmap } from 'scratch-paint/src/lib/format.js';
@@ -38,6 +39,7 @@ export function getEditorState(state, previous) {
         eraserSize: paint.eraserMode.brushSize,
         bitBrushSize: paint.bitBrushSize,
         bitEraserSize: paint.bitEraserSize,
+        cornerRadius: paint.cornerRadius,
         font: paint.font,
         fillBitmapShapes: paint.fillBitmapShapes
     };
@@ -71,6 +73,7 @@ export function applyEditorState(store, editorState) {
     applyNumber(paint.eraserMode.brushSize, editorState.eraserSize, changeEraserSize);
     applyNumber(paint.bitBrushSize, editorState.bitBrushSize, changeBitBrushSize);
     applyNumber(paint.bitEraserSize, editorState.bitEraserSize, changeBitEraserSize);
+    applyNumber(paint.cornerRadius, editorState.cornerRadius, changeCornerRadius);
 
     if (typeof editorState.font === 'string' && editorState.font !== paint.font) {
         dispatch(changeFont(editorState.font));

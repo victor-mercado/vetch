@@ -2,6 +2,7 @@ import { isSelectTool, updateSelectTool } from "./updateSelectTool.js";
 import { enable, disable, loadSettings, setGuideColor, toggle } from "./state.js";
 import { initUI } from "./ui.js";
 import { updateScaleTool } from "./updateScaleTool.js";
+import { updatePointTool } from "./updatePointTool.js";
 
 /** @type {(api: import("../../addon-api/content-script/typedef").UserscriptUtilities) => Promise<void>} */
 export default async function (api) {
@@ -20,5 +21,6 @@ export default async function (api) {
     updateSelectTool(paper, tool);
     updateScaleTool(paper, tool);
   }
+  updatePointTool(paper);
   initUI(api);
 }

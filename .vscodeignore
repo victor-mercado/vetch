@@ -25,3 +25,5 @@ webview/package-lock.json
 webview/package.json
 webview/patch.js
 webview/index.html
+log.md
+webview/build_output.txt

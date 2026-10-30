@@ -15,7 +15,6 @@ const pointPath = path.join(basePath, 'helper/selection-tools/point-tool.js');
 const paperCanvasPath = path.join(basePath, 'containers/paper-canvas.jsx');
 const updateImageHocPath = path.join(basePath, 'hocs/update-image-hoc.jsx');
 const paintEditorPath = path.join(basePath, 'containers/paint-editor.jsx');
-const fontsPath = path.join(basePath, 'lib/fonts.js');
 const fontDropdownPath = path.join(basePath, 'components/font-dropdown/font-dropdown.jsx');
 const fontReducerPath = path.join(basePath, 'reducers/font.js');
 const layoutConstantsPath = path.join(basePath, 'lib/layout-constants.js');
@@ -46,6 +45,12 @@ const modeToolsContainerPath = path.join(basePath, 'containers/mode-tools.jsx');
 const modeToolsIconsDir = path.join(basePath, 'components/mode-tools/icons');
 const toolSelectBasePath = path.join(basePath, 'components/tool-select-base/tool-select-base.jsx');
 const labeledIconButtonPath = path.join(basePath, 'components/labeled-icon-button/labeled-icon-button.jsx');
+const modesPath = path.join(basePath, 'lib/modes.js');
+const messagesPath = path.join(basePath, 'lib/messages.js');
+const scratchPaintReducerPath = path.join(basePath, 'reducers/scratch-paint-reducer.js');
+const roundedRectComponentPath = path.join(basePath, 'components/rounded-rect-mode/rounded-rect-mode.jsx');
+const roundedRectIconsDir = path.join(basePath, 'components/rounded-rect-mode');
+const fontDropdownContainerPath = path.join(basePath, 'containers/font-dropdown.jsx');
 const vetchIconsDir = path.resolve(__dirname, 'src/icons');
 
 // Vetch theme colors
@@ -259,6 +264,15 @@ import {rasterizeItems} from '../helper/rasterize';`
             `    onKeyPress: PropTypes.func.isRequired,`,
             `    onKeyPress: PropTypes.func.isRequired,
     onOptimizeSvg: PropTypes.func,`
+        ],
+        // The squircle tool becomes the bitmap rectangle tool if the image is converted to a bitmap
+        [
+            `            case Modes.RECT:
+                this.props.changeMode(Modes.BIT_RECT);`,
+            `            case Modes.ROUNDED_RECT:
+                /* falls through */
+            case Modes.RECT:
+                this.props.changeMode(Modes.BIT_RECT);`
         ]
     ]);
 
@@ -382,6 +396,60 @@ import optimizeIcon from './icons/optimize.svg';`
                             autoCorrect="off"
                             ref={props.setTextArea}
                             spellCheck={false}`
+        ],
+        // Squircle tool after the rectangle tool
+        [
+            `import RectMode from '../../containers/rect-mode.jsx';`,
+            `import RectMode from '../../containers/rect-mode.jsx';
+import SquircleMode from '../../containers/squircle-mode.jsx';`
+        ],
+        [
+            `                        <RectMode
+                            onUpdateImage={props.onUpdateImage}
+                        />`,
+            `                        <RectMode
+                            onUpdateImage={props.onUpdateImage}
+                        />
+                        <SquircleMode
+                            onUpdateImage={props.onUpdateImage}
+                        />`
+        ]
+    ]);
+
+    // ── Squircle tool ──
+    // scratch-paint's unused "rounded rectangle" mode becomes the squircle tool: it gets gradient fills like the
+    // other shape tools, its name and icon, and the corner radius in the editor state
+    patchFile(modesPath, 'modes.js', [
+        [
+            `    RECT: null,
+    LINE: null,`,
+            `    RECT: null,
+    ROUNDED_RECT: null,
+    LINE: null,`
+        ]
+    ]);
+    patchFile(messagesPath, 'messages.js', [
+        [
+            `        defaultMessage: 'Rounded Rectangle',`,
+            `        defaultMessage: 'Squircle',`
+        ]
+    ]);
+    patchFile(roundedRectComponentPath, 'rounded-rect-mode.jsx', [
+        [
+            `import roundedRectIcon from './rounded-rectangle.svg';`,
+            `import roundedRectIcon from './squircle.svg';`
+        ]
+    ]);
+    patchFile(scratchPaintReducerPath, 'scratch-paint-reducer.js', [
+        [
+            `import colorReducer from './color';`,
+            `import colorReducer from './color';
+import cornerRadiusReducer from './corner-radius';`
+        ],
+        [
+            `    color: colorReducer,`,
+            `    color: colorReducer,
+    cornerRadius: cornerRadiusReducer,`
         ]
     ]);
 
@@ -389,7 +457,13 @@ import optimizeIcon from './icons/optimize.svg';`
     // In VS Code, Cmd/Ctrl+V while a number field (e.g. the outline width) has focus pastes the Vetch
     // clipboard JSON into it as text, which the field reads as a tiny number like 8e-3003503...
     // Paste shapes onto the canvas instead unless the clipboard actually holds a number.
+    // Also sets up the Blender-style G/R transform shortcuts (see transform-shortcuts.js).
     patchFile(keyboardShortcutsHocPath, 'keyboard-shortcuts-hoc.jsx', [
+        [
+            `import CopyPasteHOC from './copy-paste-hoc.jsx';`,
+            `import CopyPasteHOC from './copy-paste-hoc.jsx';
+import TransformShortcuts from '../helper/transform-shortcuts';`
+        ],
         [
             `            bindAll(this, [
                 'handleKeyPress',
@@ -403,12 +477,20 @@ import optimizeIcon from './icons/optimize.svg';`
                 'changeToASelectMode',
                 'selectAll'
             ]);
+            this.transformShortcuts = new TransformShortcuts(() => ({
+                mode: this.props.mode,
+                textEditing: this.props.textEditing,
+                onUpdateImage: this.props.onUpdateImage,
+                setSelectedItems: () => this.props.setSelectedItems(this.props.format)
+            }));
         }
         componentDidMount () {
             document.addEventListener('paste', this.handleNumberInputPaste, true);
+            this.transformShortcuts.attach();
         }
         componentWillUnmount () {
             document.removeEventListener('paste', this.handleNumberInputPaste, true);
+            this.transformShortcuts.detach();
         }
         handleNumberInputPaste (event) {
             // pSVG: Only let real numbers be pasted into number fields; anything else is a shape paste
@@ -563,12 +645,15 @@ const ToolSelectComponent = props => {
     ]);
 
     // ── mode-tools.jsx (container) ──
-    // In point selection mode: P toggles the selected points between curved and pointed, and line caps
+    // In point selection mode: P toggles the selected points between curved and pointed, and line caps.
+    // Corner radius for the squircle tool and the selected shapes (or, in point selection mode, points).
     patchFile(modeToolsContainerPath, 'mode-tools container', [
         [
             `import Modes from '../lib/modes';`,
             `import Modes from '../lib/modes';
-import {canSetLineCap, getSelectedLineCap, setLineCap} from '../helper/point-tools';`
+import {canSetLineCap, getSelectedLineCap, setLineCap} from '../helper/point-tools';
+import {getSelectedCornerRadius, setSelectedCornerRadius} from '../helper/corner-radius';
+import {changeCornerRadius} from '../reducers/corner-radius';`
         ],
         [
             `            'handlePasteFromClipboard',
@@ -578,8 +663,34 @@ import {canSetLineCap, getSelectedLineCap, setLineCap} from '../helper/point-too
             `            'handlePasteFromClipboard',
             'handlePointPoints',
             'handleKeyDown',
-            'handleSetLineCap'
+            'handleSetLineCap',
+            'handleChangeCornerRadius'
         ]);
+    }
+    getCornerRadius () {
+        switch (this.props.mode) {
+        case Modes.SELECT:
+            return getSelectedCornerRadius(false);
+        case Modes.RESHAPE:
+            return getSelectedCornerRadius(true);
+        case Modes.ROUNDED_RECT: {
+            // The squircle that was just drawn, or the radius for the next one
+            const radius = getSelectedCornerRadius(false);
+            return typeof radius === 'undefined' ? this.props.cornerRadius : radius;
+        }
+        default:
+            return undefined;
+        }
+    }
+    handleChangeCornerRadius (radius) {
+        // pSVG: In the squircle tool, the radius is also used for the next squircles
+        if (this.props.mode === Modes.ROUNDED_RECT) {
+            this.props.changeCornerRadius(radius);
+        }
+        if (setSelectedCornerRadius(radius, this.props.mode === Modes.RESHAPE)) {
+            this.props.onUpdateImage();
+            this.props.setSelectedItems(this.props.format);
+        }
     }
     componentDidMount () {
         document.addEventListener('keydown', this.handleKeyDown);
@@ -609,19 +720,51 @@ import {canSetLineCap, getSelectedLineCap, setLineCap} from '../helper/point-too
             `                hasSelectedUnpointedPoints={this.hasSelectedUnpointedPoints()}
                 canSetLineCap={this.props.mode === Modes.RESHAPE && canSetLineCap()}
                 lineCap={this.props.mode === Modes.RESHAPE ? getSelectedLineCap() : null}
-                onSetLineCap={this.handleSetLineCap}`
+                onSetLineCap={this.handleSetLineCap}
+                cornerRadius={this.getCornerRadius()}
+                onChangeCornerRadius={this.handleChangeCornerRadius}`
+        ],
+        [
+            `    onUpdateImage: PropTypes.func.isRequired,
+    // Listen on selected items to update hasSelectedPoints`,
+            `    onUpdateImage: PropTypes.func.isRequired,
+    changeCornerRadius: PropTypes.func.isRequired,
+    cornerRadius: PropTypes.number,
+    // Listen on selected items to update hasSelectedPoints`
+        ],
+        [
+            `    mode: state.scratchPaint.mode,
+    selectedItems: state.scratchPaint.selectedItems
+});
+const mapDispatchToProps = dispatch => ({
+    clearSelectedItems: () => {
+        dispatch(clearSelectedItems());
+    },`,
+            `    mode: state.scratchPaint.mode,
+    selectedItems: state.scratchPaint.selectedItems,
+    cornerRadius: state.scratchPaint.cornerRadius
+});
+const mapDispatchToProps = dispatch => ({
+    clearSelectedItems: () => {
+        dispatch(clearSelectedItems());
+    },
+    changeCornerRadius: cornerRadius => {
+        dispatch(changeCornerRadius(cornerRadius));
+    },`
         ]
     ]);
 
     // ── mode-tools.jsx (component) ──
-    // Point selection mode: show P on the button it will press, and add line cap buttons
-    patchFile(modeToolsPath, 'mode-tools component (point selection)', [
+    // Point selection mode: show P on the button it will press, and add line cap buttons.
+    // Corner radius field for the squircle tool, the select tool and the point selection tool.
+    patchFile(modeToolsPath, 'mode-tools component (point selection, corner radius)', [
         [
             `import straightPointIcon from './icons/straight-point.svg';`,
             `import straightPointIcon from './icons/straight-point.svg';
 import capButtIcon from './icons/cap-butt.svg';
 import capRoundIcon from './icons/cap-round.svg';
-import capSquareIcon from './icons/cap-square.svg';`
+import capSquareIcon from './icons/cap-square.svg';
+import cornerRadiusIcon from './icons/corner-radius.svg';`
         ],
         [
             `        pointed: {
@@ -648,7 +791,39 @@ import capSquareIcon from './icons/cap-square.svg';`
             defaultMessage: 'Square',
             description: 'Label for the button that ends lines with a square past their end points',
             id: 'paint.modeTools.capSquare'
+        },
+        cornerRadius: {
+            defaultMessage: 'Corner Radius',
+            description: 'Label for the input that sets how rounded the corners of shapes are',
+            id: 'paint.modeTools.cornerRadius'
         },`
+        ],
+        [
+            `    switch (props.mode) {`,
+            `    // pSVG: Corner radius of the squircle tool, or of the selected shapes' (or points') corners
+    const renderCornerRadius = className => (
+        <InputGroup className={classNames(className, styles.modLabeledIconHeight)}>
+            <img
+                alt={intl.formatMessage(messages.cornerRadius)}
+                className={styles.modeToolsIcon}
+                draggable={false}
+                src={cornerRadiusIcon}
+                title={intl.formatMessage(messages.cornerRadius)}
+            />
+            <LiveInput
+                range
+                small
+                disabled={typeof props.cornerRadius === 'undefined'}
+                min="0"
+                title={intl.formatMessage(messages.cornerRadius)}
+                type="number"
+                value={typeof props.cornerRadius === 'number' ? Math.round(props.cornerRadius * 100) / 100 : ''}
+                onSubmit={props.onChangeCornerRadius}
+            />
+        </InputGroup>
+    );
+
+    switch (props.mode) {`
         ],
         [
             `    case Modes.RESHAPE:
@@ -718,7 +893,8 @@ import capSquareIcon from './icons/cap-square.svg';`
                         title={intl.formatMessage(messages.capSquare)}
                         onClick={() => props.onSetLineCap('square')}
                     />
-                </InputGroup>`
+                </InputGroup>
+                {renderCornerRadius(styles.modDashedBorder)}`
         ],
         [
             `                        title={intl.formatMessage(messages.delete)}
@@ -737,11 +913,48 @@ import capSquareIcon from './icons/cap-square.svg';`
     }
     case Modes.BIT_SELECT:`
         ],
+        // Corner radius after the flip buttons in the select tool, and on its own for the squircle tool
+        [
+            `                <InputGroup className={classNames(styles.modLabeledIconHeight)}>
+                    <LabeledIconButton
+                        hideLabel={intl.locale !== 'en'}
+                        imgSrc={flipHorizontalIcon}`,
+            `                <InputGroup
+                    className={classNames(
+                        {[styles.modDashedBorder]: props.mode === Modes.SELECT},
+                        styles.modLabeledIconHeight
+                    )}
+                >
+                    <LabeledIconButton
+                        hideLabel={intl.locale !== 'en'}
+                        imgSrc={flipHorizontalIcon}`
+        ],
+        [
+            `                        onClick={props.onFlipVertical}
+                    />
+                </InputGroup>`,
+            `                        onClick={props.onFlipVertical}
+                    />
+                </InputGroup>
+                {props.mode === Modes.SELECT ? renderCornerRadius() : null}`
+        ],
+        [
+            `    case Modes.BIT_TEXT:`,
+            `    case Modes.ROUNDED_RECT:
+        return (
+            <div className={classNames(props.className, styles.modeTools)}>
+                {renderCornerRadius()}
+            </div>
+        );
+    case Modes.BIT_TEXT:`
+        ],
         [
             `    hasSelectedUnpointedPoints: PropTypes.bool,`,
             `    hasSelectedUnpointedPoints: PropTypes.bool,
     canSetLineCap: PropTypes.bool,
+    cornerRadius: PropTypes.number,
     lineCap: PropTypes.string,
+    onChangeCornerRadius: PropTypes.func,
     onSetLineCap: PropTypes.func,`
         ],
         // No upper limit on brush and eraser sizes
@@ -767,27 +980,27 @@ import capSquareIcon from './icons/cap-square.svg';`
         ]
     ]);
 
-    // ── fonts.js ──
-    // Remove extra Latin fonts
-    patchFile(fontsPath, 'fonts.js', [
-        [
-            /const Fonts = {[\s\S]*?};\n/,
-            `const Fonts = {
-    SERIF: 'Serif',
-    CHINESE: '"Microsoft YaHei", "微软雅黑", STXihei, "华文细黑"',
-    JAPANESE: '"ヒラギノ角ゴ Pro W3", "Hiragino Kaku Gothic Pro", Osaka, "メイリオ", Meiryo, "ＭＳ Ｐゴシック", "MS PGothic"',
-    KOREAN: 'Malgun Gothic'
-};
-`
-        ]
-    ]);
-
-    // ── font.js reducer ──
-    // Change initial and default font to Serif instead of Sans Serif which was removed
+    // ── font.js reducer, text-mode.jsx ──
+    // Scratch's fonts are replaced by fonts installed on this computer (lib/fonts.js is replaced by Vetch's
+    // fonts.js below); start with the first of them
     patchFile(fontReducerPath, 'font.js', [
         [
+            `import Fonts from '../lib/fonts';`,
+            `import {DEFAULT_FONT} from '../lib/fonts';`
+        ],
+        [
             'const initialState = Fonts.SANS_SERIF;',
-            'const initialState = Fonts.SERIF;'
+            'const initialState = DEFAULT_FONT;'
+        ]
+    ]);
+    patchFile(textModePath, 'text-mode.jsx (fonts)', [
+        [
+            `import Fonts from '../lib/fonts';`,
+            `import Fonts, {DEFAULT_FONT} from '../lib/fonts';`
+        ],
+        [
+            `            this.props.changeFont(Fonts.SANS_SERIF);`,
+            `            this.props.changeFont(DEFAULT_FONT);`
         ]
     ]);
 
@@ -800,28 +1013,76 @@ import capSquareIcon from './icons/cap-square.svg';`
         ]
     ]);
 
-    // ── font-dropdown.jsx ──
-    // Remove extra JSX font buttons in the UI
+    // ── font-dropdown.jsx (component + container) ──
+    // List the installed fonts, each shown in its own font, instead of a fixed button per Scratch font
     patchFile(fontDropdownPath, 'font-dropdown.jsx', [
         [
-            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverSansSerif\}[\s\S]*?<\/Button>/,
+            `import Fonts from '../../lib/fonts';`,
+            `import {FONTS} from '../../lib/fonts';`
+        ],
+        [
+            /<InputGroup className=\{styles\.modContextMenu\}>[\s\S]*?\n {12}<\/InputGroup>/,
+            `<InputGroup className={styles.modContextMenu}>
+                {FONTS.map(font => (
+                    <Button
+                        className={classNames(styles.modMenuItem)}
+                        key={font.family}
+                        onClick={props.onChoose}
+                        onMouseOver={() => props.onHoverFont(font.family)}
+                    >
+                        <span style={{fontFamily: font.family}}>
+                            {font.name}
+                        </span>
+                    </Button>
+                ))}
+            </InputGroup>`
+        ],
+        [
+            `        <span className={classNames(props.getFontStyle(props.font), styles.displayedFontName)}>`,
+            `        <span
+            className={styles.displayedFontName}
+            style={{fontFamily: props.font}}
+        >`
+        ],
+        [
+            /    getFontStyle: PropTypes\.func\.isRequired,\n/,
             ''
         ],
         [
-            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverHandwriting\}[\s\S]*?<\/Button>/,
+            /    onHoverChinese: PropTypes\.func,\n[\s\S]*?    onHoverSerif: PropTypes\.func,\n/,
+            `    onHoverFont: PropTypes.func.isRequired,\n`
+        ]
+    ]);
+    patchFile(fontDropdownContainerPath, 'font-dropdown container', [
+        [
+            `import Fonts from '../lib/fonts';`,
+            `import {getFontName} from '../lib/fonts';`
+        ],
+        [
+            /import styles from '\.\.\/components\/font-dropdown\/font-dropdown\.css';\n/,
             ''
         ],
         [
-            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverMarker\}[\s\S]*?<\/Button>/,
-            ''
+            /            'getFontStyle',\n            'getFontName',\n[\s\S]*?            'handleChangeFontKorean',\n/,
+            `            'handleHoverFont',\n`
         ],
         [
-            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverCurly\}[\s\S]*?<\/Button>/,
-            ''
+            /    getFontStyle \(font\) \{[\s\S]*?\n    handleChoose \(\) \{/,
+            `    handleHoverFont (font) {
+        // pSVG: Preview each font while hovering it
+        if (this.dropDown.isOpen()) {
+            this.props.changeFont(font);
+        }
+    }
+    handleChoose () {`
         ],
         [
-            /<Button\s*className=\{classNames\(styles\.modMenuItem\)\}\s*onClick=\{props\.onChoose\}\s*onMouseOver=\{props\.onHoverPixel\}[\s\S]*?<\/Button>/,
-            ''
+            /                getFontName=\{this\.getFontName\}\n                getFontStyle=\{this\.getFontStyle\}\n/,
+            `                getFontName={getFontName}\n`
+        ],
+        [
+            /                onHoverChinese=\{this\.handleChangeFontChinese\}\n[\s\S]*?                onHoverSerif=\{this\.handleChangeFontSerif\}\n/,
+            `                onHoverFont={this.handleHoverFont}\n`
         ]
     ]);
 
@@ -1113,8 +1374,9 @@ const ColorButtonComponent = props => (`
     // ── Copy Vetch icons into scratch-paint icons dirs ──
     const iconsToCopy = {
         [fixedToolsIconsDir]: ['expand-stroke.svg', 'union.svg', 'subtract.svg', 'midpoint.svg'],
-        [modeToolsIconsDir]: ['cap-butt.svg', 'cap-round.svg', 'cap-square.svg'],
-        [paintEditorIconsDir]: ['optimize.svg']
+        [modeToolsIconsDir]: ['cap-butt.svg', 'cap-round.svg', 'cap-square.svg', 'corner-radius.svg'],
+        [paintEditorIconsDir]: ['optimize.svg'],
+        [roundedRectIconsDir]: ['squircle.svg']
     };
     for (const [dir, icons] of Object.entries(iconsToCopy)) {
         for (const icon of icons) {
@@ -1126,28 +1388,27 @@ const ColorButtonComponent = props => (`
     }
     console.log('[patch.js] Copied Vetch icons');
 
-    // ── Copy boolean-tools.js helper into scratch-paint ──
-    const boolSrc = path.resolve(__dirname, 'src/boolean-tools.js');
-    const boolDst = path.join(basePath, 'helper/boolean-tools.js');
-    if (fs.existsSync(boolSrc)) {
-        fs.copyFileSync(boolSrc, boolDst);
+    // ── Copy Vetch's own scratch-paint files ──
+    const filesToCopy = {
+        'boolean-tools.js': 'helper/boolean-tools.js', // Expand, Union and Subtract
+        'point-tools.js': 'helper/point-tools.js', // Midpoint and line caps
+        'rasterize.js': 'helper/rasterize.js', // Rasterize to Bitmap
+        'corner-radius.js': 'helper/corner-radius.js',
+        'corner-radius-reducer.js': 'reducers/corner-radius.js',
+        'squircle-tool.js': 'helper/tools/squircle-tool.js',
+        'squircle-mode.jsx': 'containers/squircle-mode.jsx',
+        'transform-shortcuts.js': 'helper/transform-shortcuts.js', // G and R shortcuts
+        'fonts.js': 'lib/fonts.js' // Replaces Scratch's fonts
+    };
+    for (const [file, destination] of Object.entries(filesToCopy)) {
+        const src = path.resolve(__dirname, 'src', file);
+        if (fs.existsSync(src)) {
+            fs.copyFileSync(src, path.join(basePath, destination));
+            console.log(`[patch.js] Copied ${file}`);
+        } else {
+            console.warn(`[patch.js] WARN: ${src} not found`);
+        }
     }
-    console.log('[patch.js] Copied boolean-tools.js');
-
-    // ── Copy point-tools.js helper (midpoint insertion) into scratch-paint ──
-    const pointToolsSrc = path.resolve(__dirname, 'src/point-tools.js');
-    const pointToolsDst = path.join(basePath, 'helper/point-tools.js');
-    if (fs.existsSync(pointToolsSrc)) {
-        fs.copyFileSync(pointToolsSrc, pointToolsDst);
-    }
-    console.log('[patch.js] Copied point-tools.js');
-
-    // ── Copy rasterize.js helper (Rasterize to Bitmap) into scratch-paint ──
-    const rasterizeSrc = path.resolve(__dirname, 'src/rasterize.js');
-    if (fs.existsSync(rasterizeSrc)) {
-        fs.copyFileSync(rasterizeSrc, path.join(basePath, 'helper/rasterize.js'));
-    }
-    console.log('[patch.js] Copied rasterize.js');
 
     // ── fixed-tools.jsx (container) ──
     // Add handlers for Expand Stroke, Union, Subtract and Midpoint

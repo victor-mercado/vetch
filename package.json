@@ -2,9 +2,9 @@
   "name": "vetch",
   "publisher": "MarbleStack",
   "displayName": "Vetch SVG Editor",
-  "description": "Edit SVGs using the Scratch 3.0 GUI.",
+  "description": "Edit SVGs with powerful features and an easy interface.",
   "icon": "icon.png",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -19,8 +19,8 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "scratchSvgEditor.paint",
-        "displayName": "Scratch Paint Editor",
+        "viewType": "vetchSvgEditor",
+        "displayName": "Vetch SVG Editor",
         "selector": [
           {
             "filenamePattern": "*.svg"

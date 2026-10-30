@@ -37,6 +37,9 @@ export const updateSelectTool = (paper, tool) => {
     selected: false,
   });
 
+  // pSVG: Second guide line, for snapping along a vertical and a horizontal guide at the same time
+  const crossGuideLine = guideLine.clone();
+
   const guidePointParts = {
     shadow: null,
     circle: null,
@@ -45,9 +48,11 @@ export const updateSelectTool = (paper, tool) => {
 
   // Paper adds them by default, and we don't want them in the canvas yet.
   guideLine.remove();
+  crossGuideLine.remove();
   guidePoint.remove();
 
   let itemIndicator;
+  let crossItemIndicator;
 
   const fixGuideSizes = () => {
     guidePointParts.shadow = new paper.Path.Circle({
@@ -80,17 +85,18 @@ export const updateSelectTool = (paper, tool) => {
     });
     guidePoint.removeChildren();
     guidePoint.addChildren([guidePointParts.shadow, guidePointParts.circle]);
-    guideLine.strokeWidth = 1 / paper.view.zoom;
-    guideLine.strokeColor = new paper.Color(guideColor);
-    guideLine.bringToFront();
+    for (const line of [guideLine, crossGuideLine]) {
+      line.strokeWidth = 1 / paper.view.zoom;
+      line.strokeColor = new paper.Color(guideColor);
+      line.bringToFront();
+    }
     guidePoint.bringToFront();
-    getLayer("isGuideLayer").addChildren([guideLine, guidePoint]);
+    getLayer("isGuideLayer").addChildren([guideLine, crossGuideLine, guidePoint]);
   };
 
   let removeGuides;
 
   function onMouseDrag(event) {
-    console.log("pSVG Snap Addon: onMouseDrag running. threshold:", threshold, "guideColor:", guideColor);
     const point = event.point;
     const actionBounds = getActionBounds(this.mode in BitmapModes);
 
@@ -118,11 +124,15 @@ export const updateSelectTool = (paper, tool) => {
 
     removeGuides = () => {
       guideLine.remove();
+      crossGuideLine.remove();
       guidePoint.remove();
       guidePoint.visible = false;
       guideLine.visible = false;
+      crossGuideLine.visible = false;
       itemIndicator?.remove();
       if (itemIndicator) itemIndicator.visible = false;
+      crossItemIndicator?.remove();
+      if (crossItemIndicator) crossItemIndicator.visible = false;
       resetAnchorColor();
     };
 
@@ -196,19 +206,64 @@ export const updateSelectTool = (paper, tool) => {
         .sort(sortByPrioOrDist);
 
       const closestSnapPoint = closestSnapForEachPoint.sort(sortByPrioOrDist)[0];
+
+      // pSVG: When snapping to a vertical guide, also snap to the closest horizontal guide (and the other way
+      // around), if one is close enough
+      const VERTICAL_TYPES = ["xcoord", "itemSideVert"];
+      const HORIZONTAL_TYPES = ["ycoord", "itemSideHoriz"];
+      const crossTypes = VERTICAL_TYPES.includes(closestSnapPoint?.snapPointType)
+        ? HORIZONTAL_TYPES
+        : HORIZONTAL_TYPES.includes(closestSnapPoint?.snapPointType)
+          ? VERTICAL_TYPES
+          : null;
+      const crossSnapPoint = crossTypes
+        ? generatedSnapPoints
+            .flatMap(({ point, origPoint, snapPoints }) =>
+              Object.entries(snapPoints)
+                .filter(
+                  ([pos, snapPoint]) =>
+                    crossTypes.includes(snapPoint.type) && checkPointsClose(point, snapPoint.point, scaledThreshold)
+                )
+                .map(([pos, snapPoint]) => ({
+                  point: origPoint,
+                  snapPoint: snapPoint.point,
+                  snapPointType: snapPoint.type,
+                  distance: getDist(snapPoint.point, point),
+                  pos,
+                }))
+            )
+            .sort(sortByPrioOrDist)[0]
+        : null;
+
+      const getItemID = (snap) => snap.pos.match(/item_(\d+)_/)?.[1];
+      const showItemIndicator = (snap) => {
+        const itemID = getItemID(snap);
+        const item = itemID && paper.project.getItem({ id: parseInt(itemID, 10) });
+        return item ? hoverBounds(item) : undefined;
+      };
+
       removeGuides();
       if (closestSnapPoint?.snapPoint) {
         fixGuideSizes();
         snapVector = closestSnapPoint.snapPoint.subtract(closestSnapPoint.point);
-        const itemID = closestSnapPoint.pos.match(/item_(\d+)_/)?.[1];
-        if (itemID) {
-          const item = paper.project.getItem({
-            id: parseInt(itemID, 10),
-          });
-
-          if (item) {
-            itemIndicator = hoverBounds(item);
+        itemIndicator = showItemIndicator(closestSnapPoint);
+        if (crossSnapPoint) {
+          const crossVector = crossSnapPoint.snapPoint.subtract(crossSnapPoint.point);
+          const vertical = crossTypes === HORIZONTAL_TYPES;
+          snapVector = vertical
+            ? new paper.Point(snapVector.x, crossVector.y)
+            : new paper.Point(crossVector.x, snapVector.y);
+          if (getItemID(crossSnapPoint) !== getItemID(closestSnapPoint)) {
+            crossItemIndicator = showItemIndicator(crossSnapPoint);
           }
+          crossGuideLine.firstSegment.point = vertical
+            ? new paper.Point(actionBounds.left, crossSnapPoint.snapPoint.y)
+            : new paper.Point(crossSnapPoint.snapPoint.x, actionBounds.top);
+          crossGuideLine.lastSegment.point = vertical
+            ? new paper.Point(actionBounds.right, crossSnapPoint.snapPoint.y)
+            : new paper.Point(crossSnapPoint.snapPoint.x, actionBounds.bottom);
+          crossGuideLine.visible = true;
+          crossGuideLine.bringToFront();
         }
         if (closestSnapPoint.point.equals(this.selectionCenter) && closestSnapPoint.snapPointType === "point") {
           selectionAnchor.fillColor = selectionAnchor.strokeColor = new paper.Color(guideColor);
@@ -306,7 +361,6 @@ export const updateSelectTool = (paper, tool) => {
 
   const oldMouseDown = moveTool.constructor.prototype.onMouseDown;
   moveTool.constructor.prototype.onMouseDown = function (...a) {
-    console.log("pSVG Snap Addon: onMouseDown triggered, snapOn state is:", snapOn);
     if (snapOn) moveTool.constructor.prototype.onMouseDrag = onMouseDrag;
     else moveTool.constructor.prototype.onMouseDrag = oldMouseDrag;
 
