@@ -69,7 +69,8 @@ class ScratchEditorProvider implements vscode.CustomTextEditorProvider {
         return vscode.window.registerCustomEditorProvider(ScratchEditorProvider.viewType, provider);
     }
 
-    private static readonly viewType = 'scratchSvgEditor.paint';
+    // Must match the custom editor's viewType in package.json
+    private static readonly viewType = 'vetchSvgEditor';
 
     // Webviews of all open Vetch editors
     private readonly webviews = new Set<vscode.Webview>();
